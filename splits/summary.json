@@ -1,0 +1,55 @@
+{
+  "total_images": 6832,
+  "per_bin_cap": 2500,
+  "seed": 42,
+  "split_fractions": {
+    "train": 0.7,
+    "val": 0.15,
+    "test": 0.15
+  },
+  "duplicates": {
+    "unreadable": 0,
+    "dropped_conflicting_label_copies": 2,
+    "dropped_duplicates": 51
+  },
+  "counts": {
+    "test": {
+      "biodegradable": 275,
+      "recyclable": 372,
+      "residual": 374
+    },
+    "train": {
+      "biodegradable": 1282,
+      "recyclable": 1756,
+      "residual": 1752
+    },
+    "val": {
+      "biodegradable": 275,
+      "recyclable": 372,
+      "residual": 374
+    }
+  },
+  "source_classes": {
+    "garbage_classification/biological": 985,
+    "garbage_classification/brown-glass": 209,
+    "garbage_classification/cardboard": 209,
+    "garbage_classification/clothes": 563,
+    "garbage_classification/green-glass": 209,
+    "garbage_classification/metal": 209,
+    "garbage_classification/paper": 208,
+    "garbage_classification/plastic": 208,
+    "garbage_classification/shoes": 562,
+    "garbage_classification/trash": 562,
+    "garbage_classification/white-glass": 208,
+    "realwaste/Cardboard": 208,
+    "realwaste/Food Organics": 411,
+    "realwaste/Glass": 208,
+    "realwaste/Metal": 208,
+    "realwaste/Miscellaneous Trash": 495,
+    "realwaste/Paper": 208,
+    "realwaste/Plastic": 208,
+    "realwaste/Textile Trash": 318,
+    "realwaste/Vegetation": 436
+  },
+  "local_test_images": 0
+}
