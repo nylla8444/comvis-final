@@ -279,7 +279,7 @@ class LinearSVM:
 # =============================================================================================
 # Training / prediction
 # =============================================================================================
-def train(regs=(1e-4, 1e-3, 1e-2), lrs=(0.003, 0.01), epochs=60, parts=("hog", "hsv", "lbp"), verbose=True,
+def train(regs=(1e-4, 1e-3, 1e-2, 1e-1, 1.0), lrs=(0.003, 0.01), epochs=60, parts=("hog", "hsv", "lbp"), verbose=True,
           save=True) -> dict:
     """Grid-search the regularisation strength and learning rate on the validation split."""
     parts = tuple(parts)
