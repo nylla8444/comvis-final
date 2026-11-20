@@ -128,17 +128,17 @@ def plot_robustness(rob, path):
     names = list(CORRUPTIONS)
     x = np.arange(len(names))
     w = 0.8 / max(len(rob), 1)
-    fig, ax = plt.subplots(figsize=(10, 4))
+    fig, ax = plt.subplots(figsize=(11.5, 4), layout="constrained")
     for i, (k, vals) in enumerate(rob.items()):
-        ax.bar(x + i * w - 0.4 + w / 2, [vals[n] for n in names], w, label=METHOD_INFO[k]["short"])
+        bars = ax.bar(x + i * w - 0.4 + w / 2, [vals[n] for n in names], w, label=METHOD_INFO[k]["short"])
+        ax.bar_label(bars, fmt="%.0f", fontsize=7, padding=1)
     ax.set_xticks(x, names)
     ax.set_ylabel("macro F1 (%)")
     ax.set_xlabel("test-image corruption")
-    ax.set_ylim(0, 100)
-    ax.legend()
+    ax.set_ylim(0, 105)
+    ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False)  # outside the bars
     ax.grid(axis="y", alpha=0.3)
     ax.set_title("Robustness: macro-F1 on corrupted test images")
-    fig.tight_layout()
     fig.savefig(path, dpi=130)
     plt.close(fig)
 
@@ -153,14 +153,14 @@ def plot_misclassified(images, y, pred, probs, key, path, n=12):
     pick = rng.choice(wrong, min(n, len(wrong)), replace=False)
     cols = 6
     rows = int(np.ceil(len(pick) / cols))
-    fig, axes = plt.subplots(rows, cols, figsize=(2.3 * cols, 2.6 * rows), squeeze=False)
+    # constrained layout reserves room for the two-line titles, so they never cover the row above
+    fig, axes = plt.subplots(rows, cols, figsize=(2.4 * cols, 3.0 * rows), squeeze=False, layout="constrained")
     for ax in axes.ravel():
         ax.axis("off")
     for ax, i in zip(axes.ravel(), pick):
         ax.imshow(images[i])
         ax.set_title(f"true: {CLASSES[y[i]]}\npred: {CLASSES[pred[i]]} {probs[i].max() * 100:.0f}%", fontsize=8)
     fig.suptitle(f"{METHOD_INFO[key]['short']}: misclassified test images")
-    fig.tight_layout()
     fig.savefig(path, dpi=110)
     plt.close(fig)
 
