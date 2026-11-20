@@ -9,7 +9,7 @@ Architecture (input 3x128x128):
 About 1.2 M parameters. Overfitting is controlled with data augmentation, batch norm, dropout,
 weight decay (AdamW), label smoothing and early stopping on validation macro-F1.
 
-    python scratch_cnn.py --epochs 40
+    python scratch_cnn.py --epochs 100
 """
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ class WasteNet(nn.Module):
         return self.head(self.pool(self.features(x)))
 
 
-def train(epochs=40, batch_size=64, lr=2e-3, weight_decay=5e-4, patience=10, num_workers=None, device=None) -> dict:
+def train(epochs=100, batch_size=64, lr=2e-3, weight_decay=5e-4, patience=10, num_workers=None, device=None) -> dict:
     set_seed(SEED)
     device = get_device(device)
     print(f"training WasteNet from scratch on {device}")
@@ -89,7 +89,7 @@ def load_predictor(device=None, path=MODEL_PATH) -> TorchPredictor:
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--epochs", type=int, default=40)
+    ap.add_argument("--epochs", type=int, default=100)
     ap.add_argument("--batch-size", type=int, default=64)
     ap.add_argument("--lr", type=float, default=2e-3)
     ap.add_argument("--workers", type=int, default=None)
