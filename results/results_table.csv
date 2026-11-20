@@ -1,4 +1,4 @@
 Method,Slot,Top-1 acc (%),Macro F1 (%),Runtime CPU (ms/img),Runtime GPU (ms/img),Params (M),Train time (min)
-HOG + HSV colour hist + LBP -> linear SVM,A. Classical,76.2,76.75,4.8,-,0.0,4.07
-WasteNet: 4-block CNN (ours),B. Trained from scratch,82.76,83.13,20.24,3.94,1.174,4.35
-MobileNetV3-Large (ImageNet) fine-tuned,"C. Pretrained, modern",97.36,97.43,27.31,8.84,4.206,3.5
+HOG + HSV colour hist + LBP -> linear SVM,A. Classical,77.08,77.67,5.67,-,0.0,2.83
+WasteNet: 4-block CNN (ours),B. Trained from scratch,88.64,88.9,40.76,5.87,1.174,9.75
+MobileNetV3-Large (ImageNet) fine-tuned,"C. Pretrained, modern",97.36,97.43,22.53,8.4,4.206,3.56

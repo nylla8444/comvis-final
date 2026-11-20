@@ -1,0 +1,22 @@
+[
+  {
+    "features": "hog",
+    "val_macro_f1": 63.2716514940311
+  },
+  {
+    "features": "hsv",
+    "val_macro_f1": 69.39238872390176
+  },
+  {
+    "features": "lbp",
+    "val_macro_f1": 64.51150392526958
+  },
+  {
+    "features": "hsv+lbp",
+    "val_macro_f1": 74.6896325928751
+  },
+  {
+    "features": "hog+hsv+lbp",
+    "val_macro_f1": 75.93854305235203
+  }
+]

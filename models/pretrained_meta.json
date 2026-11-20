@@ -16,7 +16,7 @@
   },
   "stage1_epochs_run": 3,
   "best_epoch": 15,
-  "train_time_min": 3.495488591664859,
+  "train_time_min": 3.5625308366667015,
   "device": "cuda (NVIDIA GeForce RTX 4050 Laptop GPU)",
   "val": {
     "accuracy": 97.45347698334965,
