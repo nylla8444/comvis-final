@@ -87,9 +87,9 @@ Expected total: about 6,800 images (above the 5,000 minimum). The exact numbers 
 
 ```powershell
 python classical.py sanity      # sanity checks on synthetic images (rubric requirement)
-python classical.py train       # ~2-5 min, CPU
+python classical.py train       # ~4-7 min, CPU (grid of 10 regularisation / learning-rate settings)
 python classical.py ablation    # optional: HOG vs colour vs texture
-python scratch_cnn.py           # WasteNet, 40 epochs max with early stopping
+python scratch_cnn.py           # WasteNet, up to 100 epochs with early stopping (~10 min on GPU)
 python pretrained.py            # MobileNetV3, 3 head epochs + up to 15 fine-tuning epochs
 ```
 
@@ -114,15 +114,31 @@ Writes to `results\`:
 
 ## 6. The notebook (deliverable)
 
-`CV_Project.ipynb` runs everything above from top to bottom (download → prepare → sanity check → train A, B, C → evaluate → figures).
-It works in Google Colab (it clones this repo itself; choose *Runtime → Change runtime type → GPU*) and in local Jupyter:
+`CV_Project.ipynb` runs everything above from top to bottom (download → prepare → sanity check → train A, B, C → feature ablation → evaluate → figures).
+It works in Google Colab (it clones this repo itself; choose *Runtime → Change runtime type → GPU*) and locally.
+
+The deliverable must be the **executed** notebook (saved with its outputs). The simplest way on the laptop runs every cell without opening a browser and writes the outputs into the file (about 30 min on an RTX 4050):
 
 ```powershell
 pip install notebook
-jupyter notebook CV_Project.ipynb
+```
+```powershell
+jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=-1 CV_Project.ipynb
 ```
 
-Save it **with outputs** after running: the deliverable must be an executed notebook.
+(Or open it with `jupyter notebook CV_Project.ipynb`, choose *Run → Run All Cells*, and save when it finishes.)
+
+The notebook retrains all three methods, so its numbers replace the ones in `results\`. Commit the notebook and the outputs together; `models` only adds the small `*_meta.json` training logs, the weights stay ignored:
+
+```powershell
+git add CV_Project.ipynb results splits models
+```
+```powershell
+git commit -m "chore(results): add final run and executed notebook"
+```
+```powershell
+git push
+```
 
 ## 7. Run the app
 
