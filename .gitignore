@@ -1,6 +1,8 @@
 # data and trained models (large; rebuilt by the scripts)
 data/
-models/
+# model weights stay local; the small *_meta.json / *_ablation.json training logs are committed
+models/*
+!models/*.json
 results/snapshots/
 *.zip
 
