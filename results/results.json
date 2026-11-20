@@ -1,0 +1,209 @@
+{
+  "results": {
+    "classical": {
+      "test": {
+        "accuracy": 76.1998041136141,
+        "macro_f1": 76.75103318621125,
+        "per_class": {
+          "biodegradable": {
+            "precision": 81.03448275862068,
+            "recall": 85.45454545454545,
+            "f1": 83.1858407079646,
+            "support": 275
+          },
+          "recyclable": {
+            "precision": 75.4874651810585,
+            "recall": 72.84946236559139,
+            "f1": 74.14500683994528,
+            "support": 372
+          },
+          "residual": {
+            "precision": 73.11827956989248,
+            "recall": 72.72727272727273,
+            "f1": 72.92225201072387,
+            "support": 374
+          }
+        },
+        "confusion_matrix": [
+          [
+            235,
+            21,
+            19
+          ],
+          [
+            20,
+            271,
+            81
+          ],
+          [
+            35,
+            67,
+            272
+          ]
+        ]
+      },
+      "per_source_accuracy": {
+        "garbage_classification": 76.82333873581848,
+        "realwaste": 75.24752475247524
+      },
+      "runtime_cpu_ms": 4.796749970410019,
+      "runtime_gpu_ms": null,
+      "params_millions": 0.0,
+      "train_time_min": 4.071974076668266,
+      "train_device": "cpu",
+      "best_epoch": 5,
+      "val_macro_f1": 76.35526693013298
+    },
+    "scratch": {
+      "test": {
+        "accuracy": 82.76199804113614,
+        "macro_f1": 83.12987210419043,
+        "per_class": {
+          "biodegradable": {
+            "precision": 83.59621451104101,
+            "recall": 96.36363636363636,
+            "f1": 89.52702702702703,
+            "support": 275
+          },
+          "recyclable": {
+            "precision": 81.86666666666666,
+            "recall": 82.52688172043011,
+            "f1": 82.1954484605087,
+            "support": 372
+          },
+          "residual": {
+            "precision": 82.97872340425532,
+            "recall": 72.99465240641712,
+            "f1": 77.66714082503556,
+            "support": 374
+          }
+        },
+        "confusion_matrix": [
+          [
+            265,
+            6,
+            4
+          ],
+          [
+            13,
+            307,
+            52
+          ],
+          [
+            39,
+            62,
+            273
+          ]
+        ]
+      },
+      "per_source_accuracy": {
+        "garbage_classification": 83.9546191247974,
+        "realwaste": 80.94059405940595
+      },
+      "runtime_cpu_ms": 20.241949940100312,
+      "runtime_gpu_ms": 3.9393999031744897,
+      "params_millions": 1.173987,
+      "train_time_min": 4.354414406667153,
+      "train_device": "cuda (NVIDIA GeForce RTX 4050 Laptop GPU)",
+      "best_epoch": 40,
+      "val_macro_f1": 82.01914442714128
+    },
+    "pretrained": {
+      "test": {
+        "accuracy": 97.35553379040157,
+        "macro_f1": 97.42745517621502,
+        "per_class": {
+          "biodegradable": {
+            "precision": 97.83393501805054,
+            "recall": 98.54545454545455,
+            "f1": 98.18840579710145,
+            "support": 275
+          },
+          "recyclable": {
+            "precision": 97.31903485254692,
+            "recall": 97.58064516129032,
+            "f1": 97.4496644295302,
+            "support": 372
+          },
+          "residual": {
+            "precision": 97.03504043126685,
+            "recall": 96.2566844919786,
+            "f1": 96.64429530201343,
+            "support": 374
+          }
+        },
+        "confusion_matrix": [
+          [
+            271,
+            0,
+            4
+          ],
+          [
+            2,
+            363,
+            7
+          ],
+          [
+            4,
+            10,
+            360
+          ]
+        ]
+      },
+      "per_source_accuracy": {
+        "garbage_classification": 98.86547811993516,
+        "realwaste": 95.04950495049505
+      },
+      "runtime_cpu_ms": 27.308099961373955,
+      "runtime_gpu_ms": 8.8363999966532,
+      "params_millions": 4.205875,
+      "train_time_min": 3.495488591664859,
+      "train_device": "cuda (NVIDIA GeForce RTX 4050 Laptop GPU)",
+      "best_epoch": 15,
+      "val_macro_f1": 97.54630554800443
+    }
+  },
+  "robustness_macro_f1": {
+    "classical": {
+      "clean": 77.38785595618722,
+      "blur": 71.16370049703383,
+      "dark": 65.15626099064308,
+      "bright": 60.40700879157842,
+      "noise": 53.46449030569005,
+      "rotate 30": 59.56549623216291
+    },
+    "scratch": {
+      "clean": 84.36822584247385,
+      "blur": 62.865915812444364,
+      "dark": 74.21775069592393,
+      "bright": 70.10277883517321,
+      "noise": 69.84390255278622,
+      "rotate 30": 82.52920035938905
+    },
+    "pretrained": {
+      "clean": 97.21617943870609,
+      "blur": 89.99744909583436,
+      "dark": 96.27118860284675,
+      "bright": 94.74145293858692,
+      "noise": 91.85873967919127,
+      "rotate 30": 96.33597632458462
+    }
+  },
+  "recommendation": {
+    "best": "pretrained",
+    "explanation": "**MobileNetV3** (MobileNetV3-Large (ImageNet) fine-tuned) is recommended: it has the highest macro-F1 on the held-out test set (97.4%, accuracy 97.4%) and takes 27.3 ms per image on the CPU (about 37 frames/s), fast enough for the live camera. It starts from features learned on 1.2 million ImageNet photos (edges, textures, object parts) and only adapts them to waste, so it generalises best to new photos taken with a phone or webcam. By comparison, Scratch CNN reaches 83.1% macro-F1 at 20.2 ms/img (learned only from ~5k images, so it has less general visual knowledge for unusual items and lighting); Classical (HOG+SVM) reaches 76.8% macro-F1 at 4.8 ms/img (fixed features cannot tell apart items with similar colour and texture, e.g. a plastic bottle vs a sachet or cardboard vs food waste).",
+    "ranking": [
+      "pretrained",
+      "scratch",
+      "classical"
+    ]
+  },
+  "missing_methods": [],
+  "test_images": 1021,
+  "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "classes": {
+    "biodegradable": "Biodegradable (Nabubulok)",
+    "recyclable": "Recyclable",
+    "residual": "Non-biodegradable / Residual"
+  }
+}
