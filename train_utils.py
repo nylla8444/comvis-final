@@ -32,14 +32,16 @@ def get_device(prefer: str | None = None) -> torch.device:
 
 
 def train_transform(size: int):
-    """Augmentation against overfitting: random crop/zoom, flips, rotation and lighting changes
-    (a webcam in a classroom never sees an item at exactly the same scale, angle or brightness)."""
+    """Augmentation against overfitting: random crop/zoom, flips, rotation, lighting changes and blur
+    (a webcam in a classroom never sees an item at exactly the same scale, angle or brightness, and an item that
+    is moving or too close to the lens comes out blurred)."""
     return T.Compose([
         T.RandomResizedCrop(size, scale=(0.6, 1.0), ratio=(0.8, 1.25)),
         T.RandomHorizontalFlip(),
         T.RandomVerticalFlip(),
         T.RandomRotation(20),
         T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.03),
+        T.RandomApply([T.GaussianBlur(kernel_size=13, sigma=(0.1, 2.0))], p=0.3),  # motion / focus blur
         T.ToTensor(),
         T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
     ])
@@ -82,6 +84,33 @@ def make_loader(split: str, size: int, batch_size: int, train: bool, num_workers
 
 def count_params(model: nn.Module) -> float:
     return sum(p.numel() for p in model.parameters()) / 1e6
+
+
+@torch.no_grad()
+def count_macs(model: nn.Module, img_size: int) -> float:
+    """Millions of multiply-accumulate operations for ONE image (conv + linear layers; BN/activations ignored).
+    Explains runtime better than the parameter count: a conv layer's cost grows with the image area it slides over."""
+    total = 0
+
+    def conv_hook(m, _inp, out):
+        nonlocal total
+        total += out.numel() // out.shape[0] * (m.in_channels // m.groups) * m.kernel_size[0] * m.kernel_size[1]
+
+    def linear_hook(m, _inp, out):
+        nonlocal total
+        total += out.numel() // out.shape[0] * m.in_features
+
+    hooks = [m.register_forward_hook(conv_hook if isinstance(m, nn.Conv2d) else linear_hook)
+             for m in model.modules() if isinstance(m, (nn.Conv2d, nn.Linear))]
+    was_training, device = model.training, next(model.parameters()).device
+    model.eval()
+    try:
+        model(torch.zeros(1, 3, img_size, img_size, device=device))
+    finally:
+        for h in hooks:
+            h.remove()
+        model.train(was_training)
+    return total / 1e6
 
 
 @torch.no_grad()
@@ -181,5 +210,5 @@ def val_metrics_of(model, img_size, device, batch_size=64) -> dict:
     return classification_metrics(y, p.argmax(1))
 
 
-__all__ = ["CLASSES", "get_device", "make_loader", "fit", "count_params", "TorchPredictor", "predict_loader",
-           "train_transform", "eval_transform", "val_metrics_of"]
+__all__ = ["CLASSES", "get_device", "make_loader", "fit", "count_params", "count_macs", "TorchPredictor",
+           "predict_loader", "train_transform", "eval_transform", "val_metrics_of"]
