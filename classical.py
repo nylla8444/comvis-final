@@ -195,6 +195,9 @@ def feature_columns(parts) -> np.ndarray:
     return np.concatenate([np.arange(fs[p].start, fs[p].stop) for p in parts])
 
 
+EXTRACT_SECONDS: dict[str, float] = {}  # split -> seconds feature extraction took (kept with the cache)
+
+
 def extract_split(split: str, use_cache: bool = True) -> tuple[np.ndarray, np.ndarray]:
     """Features for every image of a split, cached in data/processed/features_<split>.npz."""
     df = load_split(split)
@@ -202,11 +205,15 @@ def extract_split(split: str, use_cache: bool = True) -> tuple[np.ndarray, np.nd
     if use_cache and cache.exists():
         z = np.load(cache, allow_pickle=False)
         if "version" in z.files and str(z["version"]) == FEATURE_VERSION and list(z["paths"]) == list(df["path"]):
+            EXTRACT_SECONDS[split] = float(z["seconds"]) if "seconds" in z.files else 0.0
             return z["X"], z["y"]
+    t0 = time.perf_counter()
     X = np.stack([extract_features(load_rgb(p)) for p in tqdm(df["abs_path"], desc=f"features [{split}]")])
+    EXTRACT_SECONDS[split] = time.perf_counter() - t0
     y = df["label_idx"].to_numpy()
     cache.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(cache, X=X, y=y, paths=df["path"].to_numpy().astype(str), version=np.array(FEATURE_VERSION))
+    np.savez_compressed(cache, X=X, y=y, paths=df["path"].to_numpy().astype(str), version=np.array(FEATURE_VERSION),
+                        seconds=np.array(EXTRACT_SECONDS[split]))
     return X, y
 
 
@@ -403,16 +410,15 @@ class ClassicalModel:
 # =============================================================================================
 # Training / prediction
 # =============================================================================================
-def train(epochs=60, lr=0.003, kernels=("linear", "rbf"), linear_regs=(1e-3, 1e-2, 1e-1, 1.0),
-          rbf_gammas=(0.5, 1.0, 2.0), rbf_regs=(1e-2, 1e-1, 1.0), n_random_features=4096,
+def train(epochs=100, lr=0.003, kernels=("linear", "rbf"), linear_regs=(1e-2, 1e-1, 1.0, 3.0, 10.0),
+          rbf_gammas=(0.125, 0.25, 0.5, 1.0), rbf_regs=(0.3, 1.0, 3.0, 10.0), n_random_features=4096,
           parts=("hog", "hsv", "lbp"), verbose=True, save=True) -> dict:
     """Grid search on the validation split over the kernel (linear / RBF), the RBF width (gamma_scale) and the
     regularisation strength. The setting with the best validation macro-F1 is kept, at its best epoch."""
     parts = tuple(parts)
-    t0 = time.perf_counter()
     X_tr, y_tr = extract_split("train")
     X_va, y_va = extract_split("val")
-    t_feat = time.perf_counter() - t0
+    t_feat = EXTRACT_SECONDS["train"] + EXTRACT_SECONDS["val"]  # real extraction cost, even if read from the cache
     cols = feature_columns(parts)
     cw = class_weights(y_tr)
 
@@ -473,7 +479,7 @@ ABLATION_SETS = [
 ]
 
 
-def feature_ablation(epochs=40, reg=0.1, lr=0.003) -> list[dict]:
+def feature_ablation(epochs=60, reg=1.0, lr=0.003) -> list[dict]:
     """Which hand-designed cue matters, and does the spatial pyramid help? Every row uses the same linear SVM
     setting, so only the features change (validation macro-F1)."""
     rows = []
@@ -667,7 +673,7 @@ def sanity_check(verbose=True) -> dict:
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["sanity", "train", "ablation"])
-    ap.add_argument("--epochs", type=int, default=60)
+    ap.add_argument("--epochs", type=int, default=100)
     ap.add_argument("--kernel", choices=["both", "linear", "rbf"], default="both", help="which SVM kernels to try")
     args = ap.parse_args(argv)
     if args.command == "sanity":
