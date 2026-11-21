@@ -13,18 +13,22 @@ Why residual: the skip connections (He et al. 2016) let the gradient reach the e
 network trains as easily as a shallow one. The stride-2 stem shrinks the image once at the start, so WasteNet-R
 needs fewer multiply-adds per image than the first version even though it sees larger 160x160 inputs.
 
-The first version, `--arch plain` (WasteNet: 4 plain blocks [conv3x3-BN-ReLU]x2 + max-pool, 32/64/128/256 channels,
-input 128x128, ~1.2 M parameters), is kept so the two designs can be compared.
+The first version, WasteNet (`plain`: 4 plain blocks [conv3x3-BN-ReLU]x2 + max-pool, 32/64/128/256 channels,
+input 128x128, ~1.2 M parameters), is kept: by default BOTH designs are trained on the same data and the one with the
+better validation macro-F1 is used (in our third run the residual net scored lower on clean images but was faster
+and far more robust to blur, so neither design is assumed to win).
 
 Overfitting is controlled with data augmentation, batch norm, dropout, weight decay (AdamW), label smoothing and
 early stopping on validation macro-F1.
 
-    python scratch_cnn.py                  # WasteNet-R, up to 150 epochs
-    python scratch_cnn.py --arch plain     # the first version
+    python scratch_cnn.py                  # train both designs (up to 150 epochs each), keep the better on validation
+    python scratch_cnn.py --arch resnet    # only WasteNet-R
+    python scratch_cnn.py --arch plain     # only the first version
 """
 from __future__ import annotations
 
 import argparse
+import shutil
 
 import torch
 import torch.nn as nn
@@ -117,7 +121,8 @@ def build_model(arch: str = "resnet") -> nn.Module:
 
 
 def train(arch="resnet", epochs=150, batch_size=64, lr=2e-3, weight_decay=5e-4, patience=25, num_workers=None,
-          device=None) -> dict:
+          device=None, save_as: str = "scratch_cnn") -> dict:
+    """Train one design; saves models/<save_as>.pt and models/<save_as>_meta.json."""
     set_seed(SEED)
     device = get_device(device)
     name, img_size = ARCHS[arch]
@@ -125,9 +130,11 @@ def train(arch="resnet", epochs=150, batch_size=64, lr=2e-3, weight_decay=5e-4, 
     model = build_model(arch)
     tr = make_loader("train", img_size, batch_size, train=True, num_workers=num_workers)
     va = make_loader("val", img_size, batch_size, train=False, num_workers=num_workers)
-    out = fit(model, tr, va, device, epochs=epochs, lr=lr, weight_decay=weight_decay, patience=patience, log_prefix="[scratch] ")
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({"state_dict": model.state_dict(), "arch": arch, "img_size": img_size}, MODEL_PATH)
+    out = fit(model, tr, va, device, epochs=epochs, lr=lr, weight_decay=weight_decay, patience=patience,
+              log_prefix=f"[scratch/{arch}] ")
+    path = MODELS_DIR / f"{save_as}.pt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save({"state_dict": model.state_dict(), "arch": arch, "img_size": img_size}, path)
     meta = {
         "method": "scratch",
         "arch": arch,
@@ -144,9 +151,30 @@ def train(arch="resnet", epochs=150, batch_size=64, lr=2e-3, weight_decay=5e-4, 
         "val": val_metrics_of(model, img_size, device),
         "history": out["history"],
     }
-    save_json(meta, MODELS_DIR / "scratch_cnn_meta.json")
-    print(f"saved {MODEL_PATH} | params {meta['params_millions']:.2f} M | {meta['macs_millions']:.0f} M MACs/img"
+    save_json(meta, MODELS_DIR / f"{save_as}_meta.json")
+    print(f"saved {path} | params {meta['params_millions']:.2f} M | {meta['macs_millions']:.0f} M MACs/img"
           f" | best epoch {out['best_epoch']} | val F1 {meta['val']['macro_f1']:.2f}% | {out['train_time_min']:.1f} min")
+    return meta
+
+
+def train_and_select(archs=("plain", "resnet"), **kwargs) -> dict:
+    """Train every design on the same data and keep the one with the best VALIDATION macro-F1 (the test split is
+    never used for this choice). Each run stays in models/scratch_cnn_<arch>.pt / _meta.json for the report; the
+    winner is copied to models/scratch_cnn.pt / scratch_cnn_meta.json, which evaluate.py and the app use."""
+    metas = {a: train(a, save_as=f"scratch_cnn_{a}", **kwargs) for a in archs}
+    best = max(metas, key=lambda a: metas[a]["val"]["macro_f1"])
+    shutil.copyfile(MODELS_DIR / f"scratch_cnn_{best}.pt", MODEL_PATH)
+    meta = dict(metas[best])
+    meta["selected_by"] = "highest validation macro-F1"
+    meta["selection"] = {
+        a: {"model": m["architecture"], "val_macro_f1": m["val"]["macro_f1"], "val_accuracy": m["val"]["accuracy"],
+            "params_millions": m["params_millions"], "macs_millions": m["macs_millions"], "image_size": m["image_size"],
+            "best_epoch": m["best_epoch"], "epochs_run": len(m["history"]["val_f1"]), "train_time_min": m["train_time_min"]}
+        for a, m in metas.items()
+    }
+    save_json(meta, MODELS_DIR / "scratch_cnn_meta.json")
+    print("validation macro-F1: " + ", ".join(f"{metas[a]['architecture']} {metas[a]['val']['macro_f1']:.2f}%" for a in archs)
+          + f"  -> keeping {meta['architecture']}")
     return meta
 
 
@@ -160,7 +188,8 @@ def load_predictor(device=None, path=MODEL_PATH) -> TorchPredictor:
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--arch", choices=list(ARCHS), default="resnet")
+    ap.add_argument("--arch", choices=["both", *ARCHS], default="both",
+                    help="both = train plain and residual, keep the better one on validation (default)")
     ap.add_argument("--epochs", type=int, default=150)
     ap.add_argument("--patience", type=int, default=25)
     ap.add_argument("--batch-size", type=int, default=64)
@@ -168,7 +197,11 @@ def main(argv=None):
     ap.add_argument("--workers", type=int, default=None)
     ap.add_argument("--device", default=None, help="cuda / cpu (default: auto)")
     a = ap.parse_args(argv)
-    train(a.arch, a.epochs, a.batch_size, a.lr, patience=a.patience, num_workers=a.workers, device=a.device)
+    kw = dict(epochs=a.epochs, batch_size=a.batch_size, lr=a.lr, patience=a.patience, num_workers=a.workers, device=a.device)
+    if a.arch == "both":
+        train_and_select(**kw)
+    else:
+        train(a.arch, **kw)
 
 
 if __name__ == "__main__":
