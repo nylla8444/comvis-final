@@ -1,13 +1,21 @@
-"""Method A - Classical: hand-designed features + linear SVM, written from scratch in NumPy.
+"""Method A - Classical: hand-designed features + SVM, written from scratch in NumPy.
 
 Features (all implemented below with NumPy only, no OpenCV / scikit-image calls):
   * HOG   - histogram of oriented gradients (Dalal & Triggs 2005): shape / edges
   * HSV   - joint 8x4x4 colour histogram: colour (food = brown/green, cardboard = tan, ...)
   * LBP   - uniform local binary patterns (Ojala et al. 2002): surface texture
-Classifier: multi-class linear SVM (Weston-Watkins hinge loss + L2), trained with mini-batch SGD + momentum.
+  HSV and LBP use a 2-level spatial pyramid (Lazebnik et al. 2006): one histogram for the whole image plus one
+  for each quarter, so the features also know WHERE a colour or texture is (item in the middle, background
+  at the edges).
+Classifier: multi-class SVM (Weston-Watkins hinge loss + L2), trained with mini-batch SGD + momentum, either
+  * linear, or
+  * RBF kernel, approximated with random Fourier features (Rahimi & Recht 2007), which lets the SVM draw curved
+    decision boundaries while training with the same SGD code in seconds.
+The kernel, its width and the regularisation strength are chosen on the validation split.
 
     python classical.py sanity     # sanity checks on synthetic images (required by the rubric)
-    python classical.py train      # extract features, grid-search C on val, save models/classical.npz
+    python classical.py train      # extract features, grid search on val, save models/classical.npz
+    python classical.py ablation   # which feature matters, and does the spatial pyramid help?
 """
 from __future__ import annotations
 
@@ -25,6 +33,9 @@ from common import (CLASSES, MODELS_DIR, PROCESSED_DIR, SEED, class_weights, cla
 FEAT_SIZE = 128  # images are resized to 128x128 before feature extraction
 HOG_CELL, HOG_BLOCK, HOG_BINS = 16, 2, 9
 HSV_BINS = (8, 4, 4)
+LBP_BINS = 59
+PYRAMID_GRID = 2  # colour/texture histograms for the whole image + each cell of a 2x2 grid
+FEATURE_VERSION = "v2-pyramid"  # stored with the cached features; change it whenever the features change
 MODEL_PATH = MODELS_DIR / "classical.npz"
 
 
@@ -87,12 +98,27 @@ def hog(gray: np.ndarray, cell: int = HOG_CELL, block: int = HOG_BLOCK, nbins: i
     return blocks.ravel().astype(np.float32)
 
 
-def hsv_histogram(img: np.ndarray, bins=HSV_BINS) -> np.ndarray:
+def pyramid_histogram(bin_idx: np.ndarray, n_bins: int, grid: int | None = PYRAMID_GRID) -> np.ndarray:
+    """Histogram of a per-pixel bin-index map for the whole image, then (grid given) for each cell of a grid x grid
+    split. Every histogram is square-root (Hellinger) normalised, then all are concatenated."""
+    H, W = bin_idx.shape
+    regions = [bin_idx]
+    if grid:
+        regions += [bin_idx[y * H // grid:(y + 1) * H // grid, x * W // grid:(x + 1) * W // grid]
+                    for y in range(grid) for x in range(grid)]
+    out = []
+    for r in regions:
+        hist = np.bincount(r.ravel(), minlength=n_bins).astype(np.float32)
+        out.append(np.sqrt(hist / max(hist.sum(), 1.0)))
+    return np.concatenate(out)
+
+
+def hsv_histogram(img: np.ndarray, bins=HSV_BINS, pyramid: bool = True) -> np.ndarray:
+    """Joint HSV colour histogram (bins[0] x bins[1] x bins[2] values per region)."""
     hsv = rgb_to_hsv(img)
     idx = [np.minimum((hsv[..., i] * bins[i]).astype(np.int64), bins[i] - 1) for i in range(3)]
     flat = (idx[0] * bins[1] + idx[1]) * bins[2] + idx[2]
-    hist = np.bincount(flat.ravel(), minlength=int(np.prod(bins))).astype(np.float32)
-    return np.sqrt(hist / hist.sum())  # Hellinger (square-root) normalisation
+    return pyramid_histogram(flat, int(np.prod(bins)), PYRAMID_GRID if pyramid else None)
 
 
 def _uniform_lbp_table() -> np.ndarray:
@@ -125,9 +151,9 @@ def lbp_codes(gray: np.ndarray) -> np.ndarray:
     return code
 
 
-def lbp_histogram(gray: np.ndarray) -> np.ndarray:
-    hist = np.bincount(LBP_TABLE[lbp_codes(gray)].ravel(), minlength=59).astype(np.float32)
-    return np.sqrt(hist / hist.sum())
+def lbp_histogram(gray: np.ndarray, pyramid: bool = True) -> np.ndarray:
+    """Histogram of uniform LBP codes (59 values per region)."""
+    return pyramid_histogram(LBP_TABLE[lbp_codes(gray)], LBP_BINS, PYRAMID_GRID if pyramid else None)
 
 
 def extract_features(img: np.ndarray, parts=("hog", "hsv", "lbp")) -> np.ndarray:
@@ -149,6 +175,7 @@ FEATURE_SLICES = {}  # filled lazily: name -> slice into the full feature vector
 
 
 def feature_slices() -> dict[str, slice]:
+    """hog / hsv / lbp = the three feature groups; hsv0 / lbp0 = only their whole-image histogram (no pyramid)."""
     if not FEATURE_SLICES:
         dummy = np.zeros((FEAT_SIZE, FEAT_SIZE, 3), np.uint8)
         start = 0
@@ -156,7 +183,16 @@ def feature_slices() -> dict[str, slice]:
             n = extract_features(dummy, (part,)).size
             FEATURE_SLICES[part] = slice(start, start + n)
             start += n
+        hsv, lbp = FEATURE_SLICES["hsv"], FEATURE_SLICES["lbp"]
+        FEATURE_SLICES["hsv0"] = slice(hsv.start, hsv.start + int(np.prod(HSV_BINS)))
+        FEATURE_SLICES["lbp0"] = slice(lbp.start, lbp.start + LBP_BINS)
     return FEATURE_SLICES
+
+
+def feature_columns(parts) -> np.ndarray:
+    """Column indices of the full feature vector that belong to the given feature groups."""
+    fs = feature_slices()
+    return np.concatenate([np.arange(fs[p].start, fs[p].stop) for p in parts])
 
 
 def extract_split(split: str, use_cache: bool = True) -> tuple[np.ndarray, np.ndarray]:
@@ -165,12 +201,12 @@ def extract_split(split: str, use_cache: bool = True) -> tuple[np.ndarray, np.nd
     cache = PROCESSED_DIR / f"features_{split}.npz"
     if use_cache and cache.exists():
         z = np.load(cache, allow_pickle=False)
-        if list(z["paths"]) == list(df["path"]):
+        if "version" in z.files and str(z["version"]) == FEATURE_VERSION and list(z["paths"]) == list(df["path"]):
             return z["X"], z["y"]
     X = np.stack([extract_features(load_rgb(p)) for p in tqdm(df["abs_path"], desc=f"features [{split}]")])
     y = df["label_idx"].to_numpy()
     cache.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(cache, X=X, y=y, paths=df["path"].to_numpy().astype(str))
+    np.savez_compressed(cache, X=X, y=y, paths=df["path"].to_numpy().astype(str), version=np.array(FEATURE_VERSION))
     return X, y
 
 
@@ -264,78 +300,187 @@ class LinearSVM:
             del hist["val_loss"], hist["val_acc"], hist["val_f1"]
         return hist
 
-    def save(self, path, **meta):
+
+
+class RandomFourierFeatures:
+    """Explicit feature map whose dot products approximate the RBF kernel  k(x, y) = exp(-gamma ||x - y||^2)
+    (Rahimi & Recht 2007):   z(x) = sqrt(2 / D) * cos(x Omega + beta),  Omega ~ N(0, 2 gamma),  beta ~ U[0, 2 pi).
+
+    A LINEAR SVM trained on z(x) therefore behaves like an RBF-kernel SVM (curved decision boundaries) but still
+    trains with plain SGD in seconds. gamma = gamma_scale / (median squared distance between training points), the
+    usual 'median heuristic'. Omega and beta are regenerated from the seed when a model is loaded."""
+
+    def __init__(self, n_components: int = 4096, gamma_scale: float = 1.0, seed: int = SEED):
+        self.D, self.gamma_scale, self.seed = n_components, gamma_scale, seed
+        self.gamma = self.omega = self.beta = None
+
+    def fit(self, X: np.ndarray) -> "RandomFourierFeatures":
+        rng = np.random.default_rng(self.seed)
+        S = X[rng.choice(len(X), size=min(len(X), 1000), replace=False)].astype(np.float64)
+        sq = (S**2).sum(1)
+        d2 = sq[:, None] + sq[None, :] - 2.0 * S @ S.T  # all pairwise squared distances of the sample
+        median = float(np.median(d2[np.triu_indices(len(S), 1)])) if len(S) > 1 else 1.0
+        self.gamma = self.gamma_scale / max(median, 1e-12)
+        self.draw(X.shape[1])
+        return self
+
+    def draw(self, in_dim: int) -> None:
+        rng = np.random.default_rng(self.seed + 1)
+        self.omega = (rng.standard_normal((in_dim, self.D)) * np.sqrt(2.0 * self.gamma)).astype(np.float32)
+        self.beta = rng.uniform(0.0, 2.0 * np.pi, self.D).astype(np.float32)
+
+    def transform(self, X: np.ndarray) -> np.ndarray:
+        return (np.sqrt(2.0 / self.D) * np.cos(X.astype(np.float32) @ self.omega + self.beta)).astype(np.float32)
+
+
+class ClassicalModel:
+    """The full classifier: pick feature columns -> standardise -> (RBF: random Fourier features) -> SVM."""
+
+    def __init__(self, kernel: str = "linear", reg: float = 1e-3, lr: float = 0.003, epochs: int = 60,
+                 gamma_scale: float = 1.0, n_components: int = 4096, cols=None, seed: int = SEED):
+        assert kernel in ("linear", "rbf")
+        self.kernel, self.cols = kernel, cols
+        self.rff = RandomFourierFeatures(n_components, gamma_scale, seed) if kernel == "rbf" else None
+        self.svm = LinearSVM(reg=reg, lr=lr, epochs=epochs, seed=seed)
+        self.mean = self.std = None
+
+    def _map(self, X: np.ndarray) -> np.ndarray:
+        X = X[:, self.cols] if self.cols is not None else X
+        Z = ((X - self.mean) / self.std).astype(np.float32)
+        return self.rff.transform(Z) if self.rff is not None else Z
+
+    def fit(self, X, y, X_val=None, y_val=None, weights=None, verbose=False) -> dict:
+        Xc = X[:, self.cols] if self.cols is not None else X
+        self.mean, self.std = Xc.mean(0), Xc.std(0) + 1e-6  # training-set statistics only
+        if self.rff is not None:
+            self.rff.fit(((Xc - self.mean) / self.std).astype(np.float32))
+        Z_val = self._map(X_val) if X_val is not None else None
+        return self.svm.fit(self._map(X), y, Z_val, y_val, weights=weights, verbose=verbose)
+
+    @property
+    def best_epoch(self) -> int:
+        return self.svm.best_epoch
+
+    def decision_function(self, X):
+        return self.svm.decision_function(self._map(X))
+
+    def predict(self, X):
+        return self.decision_function(X).argmax(1)
+
+    def describe(self) -> dict:
+        d = {"kernel": self.kernel, "reg": self.svm.reg, "lr": self.svm.lr, "epochs": self.svm.epochs,
+             "best_epoch": self.svm.best_epoch}
+        if self.rff is not None:
+            d.update(gamma_scale=self.rff.gamma_scale, gamma=self.rff.gamma, random_features=self.rff.D)
+        return d
+
+    def save(self, path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(path, W=self.W, b=self.b, mean=self.mean, std=self.std, reg=self.reg, lr=self.lr)
+        rff = self.rff
+        np.savez(path, kernel=np.array(self.kernel), cols=np.asarray(self.cols, np.int64), mean=self.mean, std=self.std,
+                 svm_W=self.svm.W, svm_b=self.svm.b, svm_mean=self.svm.mean, svm_std=self.svm.std,
+                 reg=self.svm.reg, lr=self.svm.lr, epochs=self.svm.epochs, best_epoch=self.svm.best_epoch,
+                 rff_D=rff.D if rff else 0, rff_gamma_scale=rff.gamma_scale if rff else 0.0,
+                 rff_gamma=rff.gamma if rff else 0.0, rff_seed=rff.seed if rff else 0)
 
     @classmethod
-    def load(cls, path):
-        z = np.load(path)
-        m = cls(n_classes=z["W"].shape[1], reg=float(z["reg"]), lr=float(z["lr"]))
-        m.W, m.b, m.mean, m.std = z["W"], z["b"], z["mean"], z["std"]
+    def load(cls, path) -> "ClassicalModel":
+        z = np.load(path, allow_pickle=False)
+        if "kernel" not in z.files:
+            raise ValueError(f"{path} was saved by an older version of classical.py - run `python classical.py train`")
+        m = cls(kernel=str(z["kernel"]), reg=float(z["reg"]), lr=float(z["lr"]), epochs=int(z["epochs"]),
+                gamma_scale=float(z["rff_gamma_scale"]), n_components=int(z["rff_D"]) or 1, cols=z["cols"],
+                seed=int(z["rff_seed"]))
+        m.mean, m.std = z["mean"], z["std"]
+        m.svm.W, m.svm.b, m.svm.mean, m.svm.std = z["svm_W"], z["svm_b"], z["svm_mean"], z["svm_std"]
+        m.svm.best_epoch = int(z["best_epoch"])
+        if m.rff is not None:
+            m.rff.gamma = float(z["rff_gamma"])
+            m.rff.draw(len(m.cols))
         return m
 
 
 # =============================================================================================
 # Training / prediction
 # =============================================================================================
-def train(regs=(1e-4, 1e-3, 1e-2, 1e-1, 1.0), lrs=(0.003, 0.01), epochs=60, parts=("hog", "hsv", "lbp"), verbose=True,
-          save=True) -> dict:
-    """Grid-search the regularisation strength and learning rate on the validation split."""
+def train(epochs=60, lr=0.003, kernels=("linear", "rbf"), linear_regs=(1e-3, 1e-2, 1e-1, 1.0),
+          rbf_gammas=(0.5, 1.0, 2.0), rbf_regs=(1e-2, 1e-1, 1.0), n_random_features=4096,
+          parts=("hog", "hsv", "lbp"), verbose=True, save=True) -> dict:
+    """Grid search on the validation split over the kernel (linear / RBF), the RBF width (gamma_scale) and the
+    regularisation strength. The setting with the best validation macro-F1 is kept, at its best epoch."""
     parts = tuple(parts)
     t0 = time.perf_counter()
     X_tr, y_tr = extract_split("train")
     X_va, y_va = extract_split("val")
     t_feat = time.perf_counter() - t0
-    cols = np.concatenate([np.arange(feature_slices()[p].start, feature_slices()[p].stop) for p in parts])
-    X_tr, X_va = X_tr[:, cols], X_va[:, cols]
+    cols = feature_columns(parts)
     cw = class_weights(y_tr)
 
+    configs = []
+    if "linear" in kernels:
+        configs += [{"kernel": "linear", "reg": r} for r in linear_regs]
+    if "rbf" in kernels:
+        configs += [{"kernel": "rbf", "gamma_scale": g, "reg": r} for g in rbf_gammas for r in rbf_regs]
     t1 = time.perf_counter()
     grid, best = [], None
-    for reg in regs:
-        for lr in lrs:
-            svm = LinearSVM(reg=reg, lr=lr, epochs=epochs)
-            hist = svm.fit(X_tr, y_tr, X_va, y_va, weights=cw)
-            f1 = max(hist["val_f1"])
-            grid.append({"reg": reg, "lr": lr, "val_macro_f1": f1, "best_epoch": svm.best_epoch})
-            if verbose:
-                print(f"reg={reg:g} lr={lr:g}: best val macro-F1 {f1:.2f} (epoch {svm.best_epoch})")
-            if best is None or f1 > best[0]:
-                best = (f1, svm, hist)
+    for cfg in configs:
+        model = ClassicalModel(lr=lr, epochs=epochs, n_components=n_random_features, cols=cols, **cfg)
+        hist = model.fit(X_tr, y_tr, X_va, y_va, weights=cw)
+        f1 = max(hist["val_f1"])
+        grid.append({**cfg, "lr": lr, "val_macro_f1": f1, "best_epoch": model.best_epoch})
+        if verbose:
+            width = f" gamma_scale={cfg['gamma_scale']:g}" if cfg["kernel"] == "rbf" else ""
+            print(f"{cfg['kernel']:<6}{width} reg={cfg['reg']:g}: best val macro-F1 {f1:.2f} (epoch {model.best_epoch})")
+        if best is None or f1 > best[0]:
+            best = (f1, model, hist)
     t_svm = time.perf_counter() - t1
-    f1, svm, hist = best
+    f1, model, hist = best
     if not save:
-        return {"features": "+".join(parts), "val_macro_f1": f1}
+        return {"features": "+".join(parts), "dims": int(len(cols)), "chosen": model.describe(), "val_macro_f1": f1}
 
-    svm.save(MODEL_PATH)
-    val_metrics = classification_metrics(y_va, svm.predict(X_va))
+    model.save(MODEL_PATH)
+    val_metrics = classification_metrics(y_va, model.predict(X_va))
+    kernel_name = "RBF-kernel SVM (random Fourier features)" if model.kernel == "rbf" else "linear SVM"
     meta = {
         "method": "classical",
+        "display_name": f"HOG + colour + LBP (spatial pyramid) -> {kernel_name}",
         "features": {p: int(feature_slices()[p].stop - feature_slices()[p].start) for p in parts},
-        "feature_dim": int(X_tr.shape[1]),
+        "feature_dim": int(len(cols)),
         "image_size": FEAT_SIZE,
-        "chosen": {"reg": svm.reg, "lr": svm.lr, "epochs": epochs, "best_epoch": svm.best_epoch},
+        "chosen": model.describe(),
         "grid": grid,
         "val": val_metrics,
         "params_millions": 0.0,  # rubric: report 0 for classical methods
-        "svm_weights": int(svm.W.size + svm.b.size),
+        "svm_weights": int(model.svm.W.size + model.svm.b.size),
         "feature_extraction_min": t_feat / 60,
         "train_time_min": (t_feat + t_svm) / 60,
         "history": hist,
     }
     save_json(meta, MODELS_DIR / "classical_meta.json")
-    print(f"\nsaved {MODEL_PATH}  | val acc {val_metrics['accuracy']:.2f}%  macro-F1 {val_metrics['macro_f1']:.2f}%"
+    print(f"\nchosen: {model.describe()}")
+    print(f"saved {MODEL_PATH}  | val acc {val_metrics['accuracy']:.2f}%  macro-F1 {val_metrics['macro_f1']:.2f}%"
           f"  | train time {meta['train_time_min']:.2f} min")
     return meta
 
 
-def feature_ablation(epochs=40) -> list[dict]:
-    """Which hand-designed feature matters? Train the SVM on each feature group alone (val macro-F1)."""
+ABLATION_SETS = [
+    (("hog",), "HOG only (shape)"),
+    (("hsv",), "colour only (pyramid)"),
+    (("lbp",), "texture only (pyramid)"),
+    (("hsv", "lbp"), "colour + texture (pyramid)"),
+    (("hog", "hsv0", "lbp0"), "all three, whole-image histograms only (no pyramid)"),
+    (("hog", "hsv", "lbp"), "all three, with spatial pyramid (used)"),
+]
+
+
+def feature_ablation(epochs=40, reg=0.1, lr=0.003) -> list[dict]:
+    """Which hand-designed cue matters, and does the spatial pyramid help? Every row uses the same linear SVM
+    setting, so only the features change (validation macro-F1)."""
     rows = []
-    for parts in [("hog",), ("hsv",), ("lbp",), ("hsv", "lbp"), ("hog", "hsv", "lbp")]:
-        rows.append(train(regs=(1e-3,), lrs=(0.01,), epochs=epochs, parts=parts, verbose=False, save=False))
-        print(f"  {rows[-1]['features']:<12} val macro-F1 {rows[-1]['val_macro_f1']:.2f}%")
+    for parts, desc in ABLATION_SETS:
+        r = train(epochs=epochs, lr=lr, kernels=("linear",), linear_regs=(reg,), parts=parts, verbose=False, save=False)
+        rows.append({"features": r["features"], "description": desc, "dims": r["dims"], "val_macro_f1": r["val_macro_f1"]})
+        print(f"  {desc:<55} {r['dims']:>5} dims  val macro-F1 {r['val_macro_f1']:.2f}%")
     save_json(rows, MODELS_DIR / "classical_ablation.json")
     return rows
 
@@ -372,9 +517,9 @@ def visualize_features(img: np.ndarray):
     ax[2].set_title(f"HOG cells ({HOG_CELL}x{HOG_CELL} px, {HOG_BINS} bins)")
     ax[3].imshow(LBP_TABLE[lbp_codes(gray)], cmap="nipy_spectral")
     ax[3].set_title("uniform LBP code per pixel")
-    h = hsv_histogram(im) ** 2
+    h = hsv_histogram(im, pyramid=False) ** 2
     ax[4].bar(np.arange(h.size), h, width=1.0)
-    ax[4].set_title("joint HSV histogram (8x4x4 bins)")
+    ax[4].set_title("joint HSV histogram, whole image (8x4x4 bins)")
     ax[4].set_xlabel("bin index (hue-major)")
     ax[4].set_ylabel("fraction of pixels")
     for a in ax[:4]:
@@ -388,7 +533,7 @@ class ClassicalPredictor:
     key = "classical"
 
     def __init__(self, path=MODEL_PATH):
-        self.svm = LinearSVM.load(path)
+        self.model = ClassicalModel.load(path)
         self.n_params = 0
         self.device = "cpu"
 
@@ -398,7 +543,7 @@ class ClassicalPredictor:
     def predict_proba(self, images: list[np.ndarray]) -> np.ndarray:
         """SVM scores turned into softmax 'confidences' for display (not calibrated probabilities)."""
         X = np.stack([extract_features(im) for im in images])
-        return softmax(self.svm.decision_function(X))
+        return softmax(self.model.decision_function(X))
 
 
 # =============================================================================================
@@ -441,7 +586,18 @@ def sanity_check(verbose=True) -> dict:
     codes = lbp_codes(flat)
     results["lbp_flat_unique_codes"] = np.unique(codes).tolist()
     assert np.all(codes == 255)
-    assert np.isclose((lbp_histogram(flat) ** 2).max(), 1.0)
+    assert np.isclose((lbp_histogram(flat, pyramid=False) ** 2).max(), 1.0)
+
+    # 3b) spatial pyramid: whole image + 4 quarters; its first block is exactly the whole-image histogram, and a
+    #     picture that is green on the left and blue on the right gets different quarter histograms
+    img = np.zeros((FEAT_SIZE, FEAT_SIZE, 3), np.uint8)
+    img[:, : FEAT_SIZE // 2] = (30, 200, 40)
+    img[:, FEAT_SIZE // 2 :] = (30, 60, 220)
+    pyr, glob = hsv_histogram(img), hsv_histogram(img, pyramid=False)
+    nb = int(np.prod(HSV_BINS))
+    results["pyramid_dims"] = int(pyr.size)
+    assert pyr.size == (1 + PYRAMID_GRID**2) * nb and np.allclose(pyr[:nb], glob)
+    assert not np.allclose(pyr[nb : 2 * nb], pyr[2 * nb : 3 * nb])  # top-left quarter != top-right quarter
 
     # 4) SVM learns 3 linearly separable Gaussian blobs
     centers = np.array([[0, 4], [4, -2], [-4, -2]], np.float32)
@@ -477,6 +633,30 @@ def sanity_check(verbose=True) -> dict:
     results["synthetic_end_to_end_test_accuracy"] = float((svm.predict(Xs[te]) == ys[te]).mean() * 100)
     assert results["synthetic_end_to_end_test_accuracy"] > 90
 
+    # 6) Random Fourier features approximate the RBF kernel: z(x).z(y) ~ exp(-gamma ||x - y||^2)
+    Xk = rng.standard_normal((200, 10)).astype(np.float32)
+    rff = RandomFourierFeatures(n_components=4096, gamma_scale=1.0).fit(Xk)
+    Zk = rff.transform(Xk).astype(np.float64)
+    sq = (Xk.astype(np.float64) ** 2).sum(1)
+    K = np.exp(-rff.gamma * np.maximum(sq[:, None] + sq[None, :] - 2 * Xk @ Xk.T, 0))
+    results["rff_kernel_mean_abs_error"] = float(np.abs(Zk @ Zk.T - K).mean())
+    assert results["rff_kernel_mean_abs_error"] < 0.03
+
+    # 7) A problem no straight line can solve (two concentric rings): linear SVM ~ chance, RBF SVM solves it
+    n = 300
+    radius = np.concatenate([rng.uniform(0, 1, n), rng.uniform(2, 3, n)])
+    angle = rng.uniform(0, 2 * np.pi, 2 * n)
+    Xr = np.stack([radius * np.cos(angle), radius * np.sin(angle)], 1).astype(np.float32)
+    yr = np.repeat([0, 1], n)
+    acc = {}
+    for kernel in ("linear", "rbf"):
+        m = ClassicalModel(kernel=kernel, reg=1e-3, lr=0.01, epochs=40, n_components=512)
+        m.svm.n_classes = 2
+        m.fit(Xr, yr)
+        acc[kernel] = float((m.predict(Xr) == yr).mean() * 100)
+    results["rings_linear_svm_accuracy"], results["rings_rbf_svm_accuracy"] = acc["linear"], acc["rbf"]
+    assert acc["rbf"] > 95 and acc["rbf"] > acc["linear"] + 20
+
     if verbose:
         for k, v in results.items():
             print(f"  {k}: {v}")
@@ -488,11 +668,12 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["sanity", "train", "ablation"])
     ap.add_argument("--epochs", type=int, default=60)
+    ap.add_argument("--kernel", choices=["both", "linear", "rbf"], default="both", help="which SVM kernels to try")
     args = ap.parse_args(argv)
     if args.command == "sanity":
         sanity_check()
     elif args.command == "train":
-        train(epochs=args.epochs)
+        train(epochs=args.epochs, kernels=("linear", "rbf") if args.kernel == "both" else (args.kernel,))
     else:
         feature_ablation()
 
