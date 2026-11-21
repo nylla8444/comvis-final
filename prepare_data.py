@@ -16,10 +16,11 @@ Steps
 6. Save every selected image as a 256x256 centre-cropped JPEG in data/processed/ and write
    splits/train.csv, splits/val.csv, splits/test.csv and splits/summary.json.
 
-Optional local photos (your own phone pictures, used ONLY as an extra test set):
-    data/raw/local/biodegradable/*.jpg
-    data/raw/local/recyclable/*.jpg
-    data/raw/local/residual/*.jpg        -> splits/local_test.csv
+Optional own photos (phone or webcam; `python live.py` saves them with keys 1/2/3):
+    data/raw/local/<bin>/*.jpg        -> splits/local_test.csv   extra TEST set, never used for training
+    data/raw/local_train/<bin>/*.jpg  -> added to splits/train.csv, so all three methods also learn from them
+<bin> is biodegradable, recyclable or residual. Use DIFFERENT objects in local/ and local_train/, otherwise the
+local test score is inflated; an identical photo found in both is dropped from the test set.
 """
 from __future__ import annotations
 
@@ -197,22 +198,33 @@ def write_csv(df: pd.DataFrame, name: str) -> None:
     out[cols].to_csv(SPLITS_DIR / f"{name}.csv", index=False)
 
 
-def prepare_local(raw_dir: Path, size: int) -> int:
-    local = raw_dir / "local"
-    if not local.exists():
-        return 0
+def collect_local(folder: Path) -> pd.DataFrame:
+    """Own photos sorted into folder/<bin>/ (English or Filipino folder names, see LOCAL_ALIASES)."""
+    cols = ["orig_path", "source", "source_class", "label", "hash"]
     rows = []
-    for d in local.iterdir():
-        bin_ = LOCAL_ALIASES.get(norm(d.name))
-        if d.is_dir() and bin_:
-            for f in sorted(d.rglob("*")):
-                if f.suffix.lower() in IMG_EXT:
-                    rows.append({"orig_path": str(f), "source": "local", "source_class": d.name, "label": bin_, "hash": str(dhash(f))})
-    if not rows:
-        return 0
-    df = save_processed(pd.DataFrame(rows), PROCESSED_DIR / "local", size)
+    if folder.exists():
+        for d in sorted(folder.iterdir()):
+            bin_ = LOCAL_ALIASES.get(norm(d.name))
+            if d.is_dir() and bin_:
+                for f in sorted(d.rglob("*")):
+                    if f.suffix.lower() in IMG_EXT:
+                        rows.append({"orig_path": str(f), "source": "local", "source_class": d.name, "label": bin_,
+                                     "hash": dhash(f)})
+    df = pd.DataFrame(rows, columns=cols)
+    return df[df["hash"].notna()].reset_index(drop=True)  # unreadable files are skipped
+
+
+def prepare_local(raw_dir: Path, size: int, train_hashes: set[str]) -> tuple[int, int]:
+    """data/raw/local/<bin>/ -> splits/local_test.csv. Returns (test photos, photos dropped as copies of training photos)."""
+    df = collect_local(raw_dir / "local")
+    n_before = len(df)
+    df = df[~df["hash"].isin(train_hashes)].drop_duplicates("hash")
+    if df.empty:
+        (SPLITS_DIR / "local_test.csv").unlink(missing_ok=True)  # no stale local results from an older run
+        return 0, n_before
+    df = save_processed(df, PROCESSED_DIR / "local", size)
     write_csv(df, "local_test")
-    return len(df)
+    return len(df), n_before - len(df)
 
 
 def main(argv=None) -> None:
@@ -238,10 +250,17 @@ def main(argv=None) -> None:
     df = balance(df, args.per_bin, rng)
     df = split(df, args.val, args.test, rng)
     df = save_processed(df, PROCESSED_DIR, args.size)
+
+    # own photos for training (not balanced or capped: there are only a few hundred at most)
+    local_train = collect_local(args.raw / "local_train").drop_duplicates("hash")
+    if len(local_train):
+        local_train = save_processed(local_train.assign(split="train"), PROCESSED_DIR / "local_train", args.size)
+        df = pd.concat([df, local_train], ignore_index=True)
+        print(f"own training photos: {len(local_train)} added to the train split")
     for name in ["train", "val", "test"]:
         write_csv(df[df["split"] == name], name)
 
-    n_local = prepare_local(args.raw, args.size)
+    n_local, n_local_dropped = prepare_local(args.raw, args.size, set(local_train["hash"]))
 
     counts = df.groupby(["split", "label"]).size().unstack(fill_value=0)
     summary = {
@@ -252,13 +271,17 @@ def main(argv=None) -> None:
         "duplicates": dup_stats,
         "counts": {s: {c: int(counts.loc[s, c]) if c in counts.columns else 0 for c in CLASSES} for s in counts.index},
         "source_classes": {f"{s}/{c}": int(n) for (s, c), n in df.groupby(["source", "source_class"]).size().items()},
+        "local_train_images": int(len(local_train)),
         "local_test_images": n_local,
+        "local_test_dropped_as_copies_of_train": n_local_dropped,
     }
     save_json(summary, SPLITS_DIR / "summary.json")
     print("\nimages per split and bin:\n", counts.to_string())
     print(f"\nTOTAL = {len(df)} images" + ("" if len(df) >= 5000 else "  (WARNING: below the 5,000 minimum!)"))
     if n_local:
         print(f"local test photos: {n_local} -> splits/local_test.csv")
+    if n_local_dropped:
+        print(f"  ({n_local_dropped} local test photos skipped: identical to a training photo or to each other)")
     print("splits written to", SPLITS_DIR)
 
 
