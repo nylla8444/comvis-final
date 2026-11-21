@@ -35,6 +35,32 @@ def run_methods(predictors: dict, frame: np.ndarray) -> dict:
     return out
 
 
+class Smoother:
+    """Averages each method's class probabilities over consecutive frames (exponential moving average), so the live
+    label does not flicker when one frame is blurred or the item is still moving into the box.
+
+    alpha is the weight of the newest frame (0.35: roughly the last 5 frames count). After a pause longer than
+    reset_after_s (no frames, e.g. the stream was stopped) the history is dropped; None = never reset (videos)."""
+
+    def __init__(self, alpha: float = 0.35, reset_after_s: float | None = 1.0):
+        self.alpha, self.reset_after_s = alpha, reset_after_s
+        self.avg: dict = {}
+        self.last = 0.0
+
+    def update(self, results: dict) -> dict:
+        now = time.perf_counter()
+        if self.reset_after_s is not None and now - self.last > self.reset_after_s:
+            self.avg = {}
+        self.last = now
+        out = {}
+        for key, r in results.items():
+            p = r["probs"] if key not in self.avg else self.alpha * r["probs"] + (1 - self.alpha) * self.avg[key]
+            self.avg[key] = p
+            i = int(p.argmax())
+            out[key] = {**r, "probs": p, "label": CLASSES[i], "conf": float(p[i])}
+        return out
+
+
 def guide_box(w: int, h: int) -> tuple[int, int, int, int]:
     s = min(w, h)
     left, top = (w - s) // 2, (h - s) // 2
@@ -102,4 +128,4 @@ def draw_all(frame: np.ndarray, results: dict, best: str | None, max_side: int =
     return np.asarray(img)
 
 
-__all__ = ["run_methods", "draw_single", "draw_all", "UNSURE_THRESHOLD", "center_square"]
+__all__ = ["run_methods", "draw_single", "draw_all", "Smoother", "UNSURE_THRESHOLD", "center_square"]

@@ -16,7 +16,7 @@ import gradio as gr
 import numpy as np
 import pandas as pd
 
-from annotate import UNSURE_THRESHOLD, draw_all, draw_single, run_methods
+from annotate import UNSURE_THRESHOLD, Smoother, draw_all, draw_single, run_methods
 from common import ADVICE, CLASSES, DISPLAY, METHOD_INFO, METHOD_KEYS, RESULTS_DIR, SPLITS_DIR, load_json
 from methods import load_predictors
 
@@ -89,11 +89,13 @@ def on_image(img):
     return (*outs, table(results), verdict_md(results))
 
 
-def on_webcam(frame):
+def on_webcam(frame, smoother=None):
+    """One streamed frame. `smoother` is per-browser-session state: predictions are averaged over the last frames."""
     if frame is None or not S.preds:
-        return None, ""
-    results = run_methods(S.preds, frame)
-    return draw_all(frame, results, S.best), verdict_md(results)
+        return None, "", smoother
+    smoother = smoother or Smoother()
+    results = smoother.update(run_methods(S.preds, frame))
+    return draw_all(frame, results, S.best), verdict_md(results), smoother
 
 
 def on_video(path, analyse_fps=5.0, max_seconds=60, progress=gr.Progress()):
@@ -110,6 +112,7 @@ def on_video(path, analyse_fps=5.0, max_seconds=60, progress=gr.Progress()):
     writer = imageio.get_writer(out_path, fps=src_fps / step, codec="libx264", pixelformat="yuv420p", macro_block_size=2)
     votes = {k: Counter() for k in S.preds}
     times = {k: [] for k in S.preds}
+    smoother = Smoother(alpha=0.5, reset_after_s=None)  # analysed frames are 0.2 s apart: average over ~3 of them
     i = 0
     max_frames = int(max_seconds * src_fps)
     while i < max_frames:
@@ -118,7 +121,7 @@ def on_video(path, analyse_fps=5.0, max_seconds=60, progress=gr.Progress()):
             break
         if i % step == 0:
             rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-            results = run_methods(S.preds, rgb)
+            results = smoother.update(run_methods(S.preds, rgb))
             for k, r in results.items():
                 votes[k][r["label"]] += 1
                 times[k].append(r["ms"])
@@ -187,12 +190,15 @@ def build_ui() -> gr.Blocks:
             inp.upload(on_image, inp, [*outs, tbl, verdict])
 
         with gr.Tab("Live webcam"):
-            gr.Markdown("Allow camera access, then hold one item inside the square. All three methods run on every frame.")
+            gr.Markdown("Allow camera access, then hold one item inside the square. All three methods run on every frame; "
+                        "each method's answer is averaged over the last few frames so it does not flicker.")
             with gr.Row():
                 cam = gr.Image(sources=["webcam"], type="numpy", streaming=True, label="Camera")
                 live = gr.Image(label="Result (box colour = bin of the recommended method)")
             live_md = gr.Markdown()
-            cam.stream(on_webcam, cam, [live, live_md], stream_every=0.15, time_limit=900, concurrency_limit=1)
+            smooth_state = gr.State(None)  # one Smoother per browser session
+            cam.stream(on_webcam, [cam, smooth_state], [live, live_md, smooth_state], stream_every=0.15, time_limit=900,
+                       concurrency_limit=1)
 
         with gr.Tab("Video"):
             gr.Markdown("Upload a short clip (max 60 s). Frames are analysed 5 times per second.")
