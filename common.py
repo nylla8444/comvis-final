@@ -47,12 +47,13 @@ ADVICE = {
 METHOD_INFO = {
     "classical": {
         "slot": "A. Classical",
-        "name": "HOG + HSV colour hist + LBP -> linear SVM",
+        # default names; evaluate.py uses the exact name each training run stores in models/*_meta.json
+        "name": "HOG + colour + LBP (spatial pyramid) -> SVM",
         "short": "Classical (HOG+SVM)",
     },
     "scratch": {
         "slot": "B. Trained from scratch",
-        "name": "WasteNet: 4-block CNN (ours)",
+        "name": "WasteNet-R: residual CNN (ours)",
         "short": "Scratch CNN",
     },
     "pretrained": {

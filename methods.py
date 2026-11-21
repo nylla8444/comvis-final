@@ -20,18 +20,22 @@ def load_predictors(device=None, keys=METHOD_KEYS, verbose=True):
         if not MODEL_FILES[k].exists():
             missing.append(k)
             continue
-        if k == "classical":
-            from classical import ClassicalPredictor
+        try:
+            if k == "classical":
+                from classical import ClassicalPredictor
 
-            preds[k] = ClassicalPredictor(MODEL_FILES[k])
-        elif k == "scratch":
-            from scratch_cnn import load_predictor
+                preds[k] = ClassicalPredictor(MODEL_FILES[k])
+            elif k == "scratch":
+                from scratch_cnn import load_predictor
 
-            preds[k] = load_predictor(device)
-        else:
-            from pretrained import load_predictor
+                preds[k] = load_predictor(device)
+            else:
+                from pretrained import load_predictor
 
-            preds[k] = load_predictor(device)
+                preds[k] = load_predictor(device)
+        except Exception as e:  # e.g. a model file saved by an older version of the code: retrain that method
+            print(f"could not load {MODEL_FILES[k].name} ({type(e).__name__}: {e}) - retrain this method")
+            missing.append(k)
     if verbose and missing:
-        print(f"not trained yet (skipped): {missing}")
+        print(f"not trained yet or not loadable (skipped): {missing}")
     return preds, missing

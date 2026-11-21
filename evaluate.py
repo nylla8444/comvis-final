@@ -31,8 +31,8 @@ from methods import load_predictors
 
 # why a method wins (strength) and why it loses (weakness): the theory behind the numbers
 STRENGTH = {
-    "classical": "Its hand-designed cues (edge directions, colour histogram, texture codes) are cheap to compute, need no "
-                 "GPU and are fully explainable.",
+    "classical": "Its hand-designed cues (edge directions, colour and texture histograms per image region) are cheap to "
+                 "compute, need no GPU and are fully explainable.",
     "scratch": "It learned its own filters directly from our waste photos and is small enough for real-time use.",
     "pretrained": "It starts from features learned on 1.2 million ImageNet photos (edges, textures, object parts) and only "
                   "adapts them to waste, so it generalises best to new photos taken with a phone or webcam.",
@@ -205,7 +205,7 @@ def recommend(results: dict) -> dict:
     r = results[best]
     fps = 1000 / max(r["runtime_cpu_ms"], 1e-6)
     lines = [
-        f"**{METHOD_INFO[best]['short']}** ({METHOD_INFO[best]['name']}) is recommended: it has the highest macro-F1 on the "
+        f"**{METHOD_INFO[best]['short']}** ({r.get('model_name', METHOD_INFO[best]['name'])}) is recommended: it has the highest macro-F1 on the "
         f"held-out test set ({r['test']['macro_f1']:.1f}%, accuracy {r['test']['accuracy']:.1f}%) and takes "
         f"{r['runtime_cpu_ms']:.1f} ms per image on the CPU (about {fps:.0f} frames/s)"
         + (", fast enough for the live camera." if fps >= 10 else "."),
@@ -222,13 +222,14 @@ def results_table(results: dict) -> tuple[str, list[dict]]:
     rows = []
     for k, r in results.items():
         rows.append({
-            "Method": METHOD_INFO[k]["name"],
+            "Method": r.get("model_name", METHOD_INFO[k]["name"]),
             "Slot": METHOD_INFO[k]["slot"],
             "Top-1 acc (%)": round(r["test"]["accuracy"], 2),
             "Macro F1 (%)": round(r["test"]["macro_f1"], 2),
             "Runtime CPU (ms/img)": round(r["runtime_cpu_ms"], 2),
             "Runtime GPU (ms/img)": round(r["runtime_gpu_ms"], 2) if r.get("runtime_gpu_ms") else "-",
             "Params (M)": round(r["params_millions"], 3),
+            "MACs (M/img)": round(r["macs_millions"]) if r.get("macs_millions") else "-",
             "Train time (min)": round(r["train_time_min"], 2) if r.get("train_time_min") is not None else "-",
         })
     header = list(rows[0])
@@ -280,11 +281,13 @@ def evaluate(n_timing=100, robustness_n=600, robustness=True) -> dict:
             p.to("cuda")
             gpu_ms = time_per_image(p.predict_proba, timing_imgs, sync=p.sync)
         r = {
+            "model_name": meta.get("display_name", METHOD_INFO[key]["name"]),
             "test": m,
             "per_source_accuracy": per_source,
             "runtime_cpu_ms": cpu_ms,
             "runtime_gpu_ms": gpu_ms,
             "params_millions": float(p.n_params),
+            "macs_millions": meta.get("macs_millions"),
             "train_time_min": meta.get("train_time_min"),
             "train_device": meta.get("device", "cpu"),
             "best_epoch": meta.get("best_epoch") or meta.get("chosen", {}).get("best_epoch"),
@@ -318,7 +321,9 @@ def evaluate(n_timing=100, robustness_n=600, robustness=True) -> dict:
     md, rows = results_table(results)
     (RESULTS_DIR / "results_table.md").write_text(
         md + f"\n\nRuntime = median time to classify one 256x256 image (batch 1), CPU: {cpu_name}"
-        + (f", GPU: {gpu_name}" if gpu_name else "") + ". Params = 0 for the classical method (rubric convention).\n")
+        + (f", GPU: {gpu_name}" if gpu_name else "") + ". Params = 0 for the classical method (rubric convention). "
+        "MACs = multiply-accumulate operations per image in the network's conv/linear layers (the compute that "
+        "decides CPU speed; more parameters does not always mean slower).\n")
     pd.DataFrame(rows).to_csv(RESULTS_DIR / "results_table.csv", index=False)
     out = {
         "results": results,

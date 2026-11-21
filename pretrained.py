@@ -20,7 +20,7 @@ import torch.nn as nn
 from torchvision import models
 
 from common import CLASSES, MODELS_DIR, SEED, save_json, set_seed
-from train_utils import TorchPredictor, count_params, fit, get_device, make_loader, val_metrics_of
+from train_utils import TorchPredictor, count_macs, count_params, fit, get_device, make_loader, val_metrics_of
 
 IMG_SIZE = 224
 MODEL_PATH = MODELS_DIR / "pretrained.pt"
@@ -82,10 +82,12 @@ def train(arch="mobilenet_v3_large", head_epochs=3, epochs=15, batch_size=64, lr
     meta = {
         "method": "pretrained",
         "architecture": ARCHS[arch],
+        "display_name": f"{ARCHS[arch]} (ImageNet) fine-tuned",
         "arch": arch,
         "weights": "ImageNet-1k (torchvision)",
         "image_size": IMG_SIZE,
         "params_millions": count_params(model),
+        "macs_millions": count_macs(model, IMG_SIZE),
         "hyperparameters": {"head_epochs": head_epochs, "epochs": epochs, "batch_size": batch_size, "lr_head": lr,
                             "lr_backbone": lr / 10, "weight_decay": weight_decay, "patience": patience},
         "stage1_epochs_run": len(s1["history"]["train_loss"]),
