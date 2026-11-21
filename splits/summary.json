@@ -51,5 +51,7 @@
     "realwaste/Textile Trash": 318,
     "realwaste/Vegetation": 436
   },
-  "local_test_images": 0
+  "local_train_images": 0,
+  "local_test_images": 0,
+  "local_test_dropped_as_copies_of_train": 0
 }

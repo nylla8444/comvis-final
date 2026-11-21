@@ -1,197 +1,203 @@
 {
   "results": {
     "classical": {
+      "model_name": "HOG + colour + LBP (spatial pyramid) -> RBF-kernel SVM (random Fourier features)",
       "test": {
-        "accuracy": 77.08129285014691,
-        "macro_f1": 77.66659980596154,
+        "accuracy": 79.82370225269344,
+        "macro_f1": 80.33175858899037,
         "per_class": {
           "biodegradable": {
-            "precision": 83.69565217391305,
-            "recall": 84.0,
-            "f1": 83.8475499092559,
+            "precision": 84.3205574912892,
+            "recall": 88.0,
+            "f1": 86.12099644128114,
             "support": 275
           },
           "recyclable": {
-            "precision": 75.55555555555556,
-            "recall": 73.11827956989248,
-            "f1": 74.31693989071039,
+            "precision": 79.66101694915254,
+            "recall": 75.80645161290323,
+            "f1": 77.68595041322314,
             "support": 372
           },
           "residual": {
-            "precision": 73.76623376623377,
-            "recall": 75.93582887700535,
-            "f1": 74.83530961791831,
+            "precision": 76.57894736842105,
+            "recall": 77.80748663101605,
+            "f1": 77.18832891246684,
             "support": 374
           }
         },
         "confusion_matrix": [
           [
-            231,
-            26,
-            18
+            242,
+            19,
+            14
           ],
           [
-            17,
-            272,
-            83
+            15,
+            282,
+            75
           ],
           [
-            28,
-            62,
-            284
+            30,
+            53,
+            291
           ]
         ]
       },
       "per_source_accuracy": {
-        "garbage_classification": 77.3095623987034,
-        "realwaste": 76.73267326732673
+        "garbage_classification": 79.57860615883307,
+        "realwaste": 80.19801980198021
       },
-      "runtime_cpu_ms": 5.667199962772429,
+      "runtime_cpu_ms": 10.628699965309352,
       "runtime_gpu_ms": null,
       "params_millions": 0.0,
-      "train_time_min": 2.8277116966666656,
+      "macs_millions": null,
+      "train_time_min": 3.9837907583336345,
       "train_device": "cpu",
-      "best_epoch": 42,
-      "val_macro_f1": 77.86361770477471
+      "best_epoch": 58,
+      "val_macro_f1": 80.48500816182472
     },
     "scratch": {
+      "model_name": "WasteNet-R: residual CNN (ours)",
       "test": {
-        "accuracy": 88.63858961802154,
-        "macro_f1": 88.90217900046804,
+        "accuracy": 86.38589618021547,
+        "macro_f1": 86.95709101897066,
         "per_class": {
           "biodegradable": {
-            "precision": 89.38356164383562,
-            "recall": 94.9090909090909,
-            "f1": 92.06349206349206,
+            "precision": 92.7797833935018,
+            "recall": 93.45454545454545,
+            "f1": 93.11594202898551,
             "support": 275
           },
           "recyclable": {
-            "precision": 88.79781420765028,
+            "precision": 81.45363408521304,
             "recall": 87.36559139784946,
-            "f1": 88.07588075880759,
+            "f1": 84.30609597924773,
             "support": 372
           },
           "residual": {
-            "precision": 87.87878787878788,
-            "recall": 85.29411764705883,
-            "f1": 86.56716417910447,
+            "precision": 86.95652173913044,
+            "recall": 80.21390374331551,
+            "f1": 83.44923504867872,
             "support": 374
           }
         },
         "confusion_matrix": [
           [
-            261,
-            7,
+            257,
+            11,
             7
           ],
           [
-            10,
+            9,
             325,
-            37
+            38
           ],
           [
-            21,
-            34,
-            319
+            11,
+            63,
+            300
           ]
         ]
       },
       "per_source_accuracy": {
-        "garbage_classification": 89.3030794165316,
-        "realwaste": 87.62376237623762
+        "garbage_classification": 85.25121555915722,
+        "realwaste": 88.11881188118812
       },
-      "runtime_cpu_ms": 40.757449984084815,
-      "runtime_gpu_ms": 5.867499974556267,
-      "params_millions": 1.173987,
-      "train_time_min": 9.746677993333044,
+      "runtime_cpu_ms": 14.253400091547519,
+      "runtime_gpu_ms": 4.725300008431077,
+      "params_millions": 1.596579,
+      "macs_millions": 634.675968,
+      "train_time_min": 19.513389308333476,
       "train_device": "cuda (NVIDIA GeForce RTX 4050 Laptop GPU)",
-      "best_epoch": 93,
-      "val_macro_f1": 87.80336648251074
+      "best_epoch": 111,
+      "val_macro_f1": 86.94730208663933
     },
     "pretrained": {
+      "model_name": "MobileNetV3-Large (ImageNet) fine-tuned",
       "test": {
-        "accuracy": 97.35553379040157,
-        "macro_f1": 97.42745517621502,
+        "accuracy": 97.55142017629774,
+        "macro_f1": 97.59053391149354,
         "per_class": {
           "biodegradable": {
-            "precision": 97.83393501805054,
+            "precision": 97.48201438848922,
             "recall": 98.54545454545455,
-            "f1": 98.18840579710145,
+            "f1": 98.01084990958408,
             "support": 275
           },
           "recyclable": {
-            "precision": 97.31903485254692,
-            "recall": 97.58064516129032,
-            "f1": 97.4496644295302,
+            "precision": 97.32620320855615,
+            "recall": 97.84946236559139,
+            "f1": 97.58713136729223,
             "support": 372
           },
           "residual": {
-            "precision": 97.03504043126685,
-            "recall": 96.2566844919786,
-            "f1": 96.64429530201343,
+            "precision": 97.8319783197832,
+            "recall": 96.52406417112299,
+            "f1": 97.1736204576043,
             "support": 374
           }
         },
         "confusion_matrix": [
           [
             271,
-            0,
-            4
+            2,
+            2
           ],
           [
             2,
-            363,
-            7
+            364,
+            6
           ],
           [
-            4,
-            10,
-            360
+            5,
+            8,
+            361
           ]
         ]
       },
       "per_source_accuracy": {
-        "garbage_classification": 98.86547811993516,
-        "realwaste": 95.04950495049505
+        "garbage_classification": 99.02755267423015,
+        "realwaste": 95.29702970297029
       },
-      "runtime_cpu_ms": 22.53165002912283,
-      "runtime_gpu_ms": 8.398500038310885,
+      "runtime_cpu_ms": 27.12799998698756,
+      "runtime_gpu_ms": 8.366549969650805,
       "params_millions": 4.205875,
-      "train_time_min": 3.5625308366667015,
+      "macs_millions": 215.3136,
+      "train_time_min": 4.706631858332548,
       "train_device": "cuda (NVIDIA GeForce RTX 4050 Laptop GPU)",
-      "best_epoch": 15,
-      "val_macro_f1": 97.54630554800443
+      "best_epoch": 13,
+      "val_macro_f1": 96.97674220597436
     }
   },
   "robustness_macro_f1": {
     "classical": {
-      "clean": 78.43418551028621,
-      "blur": 70.57949803632793,
-      "dark": 64.84018264840182,
-      "bright": 58.76907270884529,
-      "noise": 49.15949580295041,
-      "rotate 30": 60.934546871771076
+      "clean": 80.83840492858828,
+      "blur": 73.20274624943754,
+      "dark": 69.217252206843,
+      "bright": 61.86318333208124,
+      "noise": 54.06273107839233,
+      "rotate 30": 69.53814309461973
     },
     "scratch": {
-      "clean": 89.13069048634775,
-      "blur": 64.13121277189407,
-      "dark": 82.34754956977179,
-      "bright": 73.82507719993524,
-      "noise": 72.40299464684804,
-      "rotate 30": 86.62496095725571
+      "clean": 87.39963513873627,
+      "blur": 86.27802638111044,
+      "dark": 82.11919510998817,
+      "bright": 76.9909743921546,
+      "noise": 77.61215383873888,
+      "rotate 30": 85.69570765643132
     },
     "pretrained": {
-      "clean": 97.21617943870609,
-      "blur": 89.99744909583436,
-      "dark": 96.27118860284675,
-      "bright": 94.74145293858692,
-      "noise": 91.85873967919127,
-      "rotate 30": 96.33597632458462
+      "clean": 97.16115980930957,
+      "blur": 95.48997748845488,
+      "dark": 96.72941201530651,
+      "bright": 93.39421924376158,
+      "noise": 92.05105663812199,
+      "rotate 30": 95.79176699919735
     }
   },
   "recommendation": {
     "best": "pretrained",
-    "explanation": "**MobileNetV3** (MobileNetV3-Large (ImageNet) fine-tuned) is recommended: it has the highest macro-F1 on the held-out test set (97.4%, accuracy 97.4%) and takes 22.5 ms per image on the CPU (about 44 frames/s), fast enough for the live camera. It starts from features learned on 1.2 million ImageNet photos (edges, textures, object parts) and only adapts them to waste, so it generalises best to new photos taken with a phone or webcam. By comparison, Scratch CNN reaches 88.9% macro-F1 at 40.8 ms/img (learned only from ~5k images, so it has less general visual knowledge for unusual items and lighting); Classical (HOG+SVM) reaches 77.7% macro-F1 at 5.7 ms/img (fixed features cannot tell apart items with similar colour and texture, e.g. a plastic bottle vs a sachet or cardboard vs food waste).",
+    "explanation": "**MobileNetV3** (MobileNetV3-Large (ImageNet) fine-tuned) is recommended: it has the highest macro-F1 on the held-out test set (97.6%, accuracy 97.6%) and takes 27.1 ms per image on the CPU (about 37 frames/s), fast enough for the live camera. It starts from features learned on 1.2 million ImageNet photos (edges, textures, object parts) and only adapts them to waste, so it generalises best to new photos taken with a phone or webcam. By comparison, Scratch CNN reaches 87.0% macro-F1 at 14.3 ms/img (learned only from ~5k images, so it has less general visual knowledge for unusual items and lighting); Classical (HOG+SVM) reaches 80.3% macro-F1 at 10.6 ms/img (fixed features cannot tell apart items with similar colour and texture, e.g. a plastic bottle vs a sachet or cardboard vs food waste).",
     "ranking": [
       "pretrained",
       "scratch",

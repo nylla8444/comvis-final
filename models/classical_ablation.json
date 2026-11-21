@@ -1,22 +1,38 @@
 [
   {
     "features": "hog",
-    "val_macro_f1": 63.2716514940311
+    "description": "HOG only (shape)",
+    "dims": 1764,
+    "val_macro_f1": 65.09776404558187
   },
   {
     "features": "hsv",
-    "val_macro_f1": 69.39238872390176
+    "description": "colour only (pyramid)",
+    "dims": 640,
+    "val_macro_f1": 69.74007727432384
   },
   {
     "features": "lbp",
-    "val_macro_f1": 64.51150392526958
+    "description": "texture only (pyramid)",
+    "dims": 295,
+    "val_macro_f1": 66.99791371715968
   },
   {
     "features": "hsv+lbp",
-    "val_macro_f1": 74.6896325928751
+    "description": "colour + texture (pyramid)",
+    "dims": 935,
+    "val_macro_f1": 75.90726681206684
+  },
+  {
+    "features": "hog+hsv0+lbp0",
+    "description": "all three, whole-image histograms only (no pyramid)",
+    "dims": 1951,
+    "val_macro_f1": 77.09356163487588
   },
   {
     "features": "hog+hsv+lbp",
-    "val_macro_f1": 75.93854305235203
+    "description": "all three, with spatial pyramid (used)",
+    "dims": 2699,
+    "val_macro_f1": 77.8542519166809
   }
 ]
