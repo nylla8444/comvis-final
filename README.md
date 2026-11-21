@@ -15,8 +15,8 @@ plus an app that runs all three on a photo, a video or the live webcam.
 
 | Slot | Method | File |
 |---|---|---|
-| A. Classical | HOG + HSV colour histogram + uniform LBP, linear SVM, **all in NumPy** | `classical.py` |
-| B. Trained from scratch | WasteNet, our 4-block CNN (~1.2 M params), PyTorch | `scratch_cnn.py` |
+| A. Classical | HOG + HSV colour + uniform LBP histograms (spatial pyramid), SVM with linear or RBF kernel, **all in NumPy** | `classical.py` |
+| B. Trained from scratch | WasteNet-R, our residual CNN (~1.6 M params), PyTorch | `scratch_cnn.py` |
 | C. Pretrained, modern | MobileNetV3-Large, ImageNet weights (torchvision), fine-tuned | `pretrained.py` |
 
 ---
@@ -62,13 +62,30 @@ Or download in a browser and unzip yourself:
 (Dataset pages for citing: https://www.kaggle.com/datasets/mostafaabla/garbage-classification and https://archive.ics.uci.edu/dataset/908/realwaste.
 If you download by hand, you can also drop the zips into `data\downloads\` as `garbage-classification.zip` / `realwaste.zip` and run `python download_data.py` to unzip.)
 
-Optional but recommended: **our own local photos** as an extra test set (never used for training). Take phone photos of one item each and put them in:
+### Optional but recommended: our own photos
+
+The datasets are mostly clean web photos and landfill photos; a classroom webcam looks different (hand, background, lighting).
+Our own photos show how well the methods handle that, and can also teach them. Two folders, one item per photo:
 
 ```
-data\raw\local\biodegradable\   (banana peel, rice, leaves, ...)
-data\raw\local\recyclable\      (bottles, cans, cardboard, paper, ...)
-data\raw\local\residual\        (sachets, candy wrappers, styrofoam, ...)
+data\raw\local\<bin>\         extra TEST set, never trained on: measures real-world accuracy
+data\raw\local_train\<bin>\   added to the TRAINING split for all three methods
+<bin> = biodegradable (banana peel, rice, leaves ...), recyclable (bottles, cans, cardboard ...), residual (sachets, wrappers, styrofoam ...)
 ```
+
+Use **different objects** in the two folders (an identical photo found in both is dropped from the test set). Aim for 30+ photos
+per bin in each, with the classroom background and light, and include sachets and plastic bags.
+
+The quickest way is the webcam window (needs trained models, so do this after a first training run):
+
+```powershell
+python live.py                   # keys 1 / 2 / 3 save the frame into data\raw\local\<bin>\ (test photos)
+```
+```powershell
+python live.py --save-to train   # keys 1 / 2 / 3 save into data\raw\local_train\<bin>\ (training photos)
+```
+
+Phone photos can be copied into the same folders. Then run `prepare_data.py` and retrain (or rerun the notebook).
 
 ## 3. Build the dataset and splits
 
@@ -80,6 +97,7 @@ python prepare_data.py
 * removes duplicate images, caps each bin at 2,500 images sampled evenly across source classes
 * writes `splits\train.csv`, `val.csv`, `test.csv` (70/15/15, seed 42) and `splits\summary.json`
 * stores every image as a 256×256 centre crop in `data\processed\`
+* adds `data\raw\local_train\` photos to the train split and writes `data\raw\local\` photos to `splits\local_test.csv` (if present)
 
 Expected total: about 6,800 images (above the 5,000 minimum). The exact numbers are printed and saved in `splits\summary.json`.
 
@@ -87,13 +105,14 @@ Expected total: about 6,800 images (above the 5,000 minimum). The exact numbers 
 
 ```powershell
 python classical.py sanity      # sanity checks on synthetic images (rubric requirement)
-python classical.py train       # ~4-7 min, CPU (grid of 10 regularisation / learning-rate settings)
-python classical.py ablation    # optional: HOG vs colour vs texture
-python scratch_cnn.py           # WasteNet, up to 100 epochs with early stopping (~10 min on GPU)
+python classical.py train       # ~5-8 min, CPU (grid: linear and RBF kernel, 13 settings)
+python classical.py ablation    # optional: HOG vs colour vs texture, with/without spatial pyramid
+python scratch_cnn.py           # WasteNet-R, up to 150 epochs with early stopping (~15 min on GPU)
 python pretrained.py            # MobileNetV3, 3 head epochs + up to 15 fine-tuning epochs
 ```
 
-Each saves its model in `models\` plus a `*_meta.json` (training curves, params, training time, validation metrics).
+Each saves its model in `models\` plus a `*_meta.json` (training curves, params, compute, training time, validation metrics).
+`python scratch_cnn.py --arch plain` trains the first version of the scratch CNN (plain 4-block WasteNet) for comparison.
 
 ## 5. Evaluate (fills the results table)
 
@@ -105,7 +124,7 @@ Writes to `results\`:
 
 | File | For the report |
 |---|---|
-| `results_table.md` / `.csv` | the comparison table: accuracy, macro-F1, runtime (CPU & GPU), params, train time |
+| `results_table.md` / `.csv` | the comparison table: accuracy, macro-F1, runtime (CPU & GPU), params, MACs (compute per image), train time |
 | `confusion_matrices.png` | confusion matrix per method |
 | `training_curves.png` | train vs validation loss/accuracy for every method |
 | `robustness.png` | macro-F1 under blur / dark / bright / noise / rotation |
@@ -117,16 +136,17 @@ Writes to `results\`:
 `CV_Project.ipynb` runs everything above from top to bottom (download → prepare → sanity check → train A, B, C → feature ablation → evaluate → figures).
 It works in Google Colab (it clones this repo itself; choose *Runtime → Change runtime type → GPU*) and locally.
 
-The deliverable must be the **executed** notebook (saved with its outputs). The simplest way on the laptop runs every cell without opening a browser and writes the outputs into the file (about 30 min on an RTX 4050):
+The deliverable must be the **executed** notebook (saved with its outputs). The simplest way on the laptop runs every cell without opening a browser and writes the outputs into the file (about 45 min on an RTX 4050; nothing is printed until it finishes with `Writing ... bytes to CV_Project.ipynb`):
 
 ```powershell
-pip install notebook
+python -m pip install notebook
 ```
 ```powershell
-jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=-1 CV_Project.ipynb
+python -m jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=-1 CV_Project.ipynb
 ```
 
-(Or open it with `jupyter notebook CV_Project.ipynb`, choose *Run → Run All Cells*, and save when it finishes.)
+(`python -m` avoids the "jupyter is not recognized" error when pip's Scripts folder is not on PATH. Or open it with
+`python -m jupyter notebook CV_Project.ipynb`, choose *Run → Run All Cells*, and save when it finishes.)
 
 The notebook retrains all three methods, so its numbers replace the ones in `results\`. Commit the notebook and the outputs together; `models` only adds the small `*_meta.json` training logs, the weights stay ignored:
 
@@ -149,7 +169,8 @@ python live.py         # full-window OpenCV webcam demo (most reliable for the c
 
 * `python app.py --share` prints a temporary public link (handy when controlling the laptop remotely).
 * `python app.py --cpu` / `python live.py --cpu` run on the CPU to show real-time speed without a GPU.
-* `live.py` keys: `q` quit, `s` snapshot, `m` mirror. `--camera 1` for a USB webcam.
+* `live.py` keys: `q` quit, `s` snapshot, `m` mirror, `1`/`2`/`3` save the frame as a biodegradable/recyclable/residual photo (see step 2). `--camera 1` for a USB webcam.
+* In the live webcam modes each method's answer is averaged over the last few frames, so the label does not flicker (`live.py --no-smooth` shows the raw per-frame answer).
 
 **Demo tips:** hold **one** item inside the square, fill most of the square, use a plain background (bond paper or a table) and good light.
 Below 55% confidence the app says *Not sure* instead of guessing.
@@ -162,9 +183,9 @@ Below 55% confidence the app says *Not sure* instead of guessing.
 common.py         shared constants: bins, colours, preprocessing, metrics, timing
 download_data.py  downloads + unzips both datasets
 prepare_data.py   3-bin mapping, de-duplication, balancing, splits, 256x256 cache
-classical.py      Method A (NumPy HOG/HSV/LBP + SVM), sanity checks, ablation, feature figure
-train_utils.py    shared PyTorch training loop (same augmentation/loss/early stopping for B and C)
-scratch_cnn.py    Method B (WasteNet)
+classical.py      Method A (NumPy HOG/HSV/LBP + spatial pyramid, linear/RBF SVM), sanity checks, ablation, feature figure
+train_utils.py    shared PyTorch training loop (same augmentation/loss/early stopping for B and C), MAC counter
+scratch_cnn.py    Method B (WasteNet-R residual CNN; --arch plain = first version)
 pretrained.py     Method C (MobileNetV3-Large; --arch efficientnet_b0 / resnet18 also work)
 methods.py        loads the trained methods behind one predict_proba() interface
 evaluate.py       experiments, results table, plots, recommendation
@@ -187,6 +208,9 @@ CV_Project.ipynb  the end-to-end notebook
 * Garbage Classification (12 classes), Kaggle user mostafaabla, https://www.kaggle.com/datasets/mostafaabla/garbage-classification
 * S. Single, S. Iranmanesh, R. Raad, "RealWaste: A Novel Real-Life Data Set for Landfill Waste Classification Using Deep Learning", *Information* 14(12):633, 2023. UCI ML Repository #908, CC BY 4.0.
 * MobileNetV3: A. Howard et al., "Searching for MobileNetV3", ICCV 2019. Weights from torchvision.
+
+Method references: HOG (Dalal & Triggs, CVPR 2005); uniform LBP (Ojala et al., TPAMI 2002); spatial pyramid
+(Lazebnik et al., CVPR 2006); random Fourier features (Rahimi & Recht, NeurIPS 2007); residual networks (He et al., CVPR 2016).
 
 ## AI-assistance disclosure
 
