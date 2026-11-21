@@ -16,7 +16,7 @@ plus an app that runs all three on a photo, a video or the live webcam.
 | Slot | Method | File |
 |---|---|---|
 | A. Classical | HOG + HSV colour + uniform LBP histograms (spatial pyramid), SVM with linear or RBF kernel, **all in NumPy** | `classical.py` |
-| B. Trained from scratch | WasteNet-R, our residual CNN (~1.6 M params), PyTorch | `scratch_cnn.py` |
+| B. Trained from scratch | our CNN in two designs, WasteNet (plain) and WasteNet-R (residual), 1.2-1.6 M params, PyTorch; the better on validation is kept | `scratch_cnn.py` |
 | C. Pretrained, modern | MobileNetV3-Large, ImageNet weights (torchvision), fine-tuned | `pretrained.py` |
 
 ---
@@ -105,14 +105,15 @@ Expected total: about 6,800 images (above the 5,000 minimum). The exact numbers 
 
 ```powershell
 python classical.py sanity      # sanity checks on synthetic images (rubric requirement)
-python classical.py train       # ~5-8 min, CPU (grid: linear and RBF kernel, 13 settings)
+python classical.py train       # ~6-10 min, CPU (grid: linear and RBF kernel, 21 settings, 100 epochs)
 python classical.py ablation    # optional: HOG vs colour vs texture, with/without spatial pyramid
-python scratch_cnn.py           # WasteNet-R, up to 150 epochs with early stopping (~15 min on GPU)
+python scratch_cnn.py           # WasteNet and WasteNet-R, up to 150 epochs each, keeps the better (~35 min on GPU)
 python pretrained.py            # MobileNetV3, 3 head epochs + up to 15 fine-tuning epochs
 ```
 
 Each saves its model in `models\` plus a `*_meta.json` (training curves, params, compute, training time, validation metrics).
-`python scratch_cnn.py --arch plain` trains the first version of the scratch CNN (plain 4-block WasteNet) for comparison.
+`scratch_cnn.py` trains both designs on the same data and keeps the one with the higher **validation** macro-F1 (both runs stay in
+`models\scratch_cnn_plain_meta.json` / `scratch_cnn_resnet_meta.json` for the report). `--arch plain` or `--arch resnet` trains only one.
 
 ## 5. Evaluate (fills the results table)
 
@@ -136,7 +137,7 @@ Writes to `results\`:
 `CV_Project.ipynb` runs everything above from top to bottom (download → prepare → sanity check → train A, B, C → feature ablation → evaluate → figures).
 It works in Google Colab (it clones this repo itself; choose *Runtime → Change runtime type → GPU*) and locally.
 
-The deliverable must be the **executed** notebook (saved with its outputs). The simplest way on the laptop runs every cell without opening a browser and writes the outputs into the file (about 45 min on an RTX 4050; nothing is printed until it finishes with `Writing ... bytes to CV_Project.ipynb`):
+The deliverable must be the **executed** notebook (saved with its outputs). The simplest way on the laptop runs every cell without opening a browser and writes the outputs into the file (about 65 min on an RTX 4050; nothing is printed until it finishes with `Writing ... bytes to CV_Project.ipynb`):
 
 ```powershell
 python -m pip install notebook
@@ -185,7 +186,7 @@ download_data.py  downloads + unzips both datasets
 prepare_data.py   3-bin mapping, de-duplication, balancing, splits, 256x256 cache
 classical.py      Method A (NumPy HOG/HSV/LBP + spatial pyramid, linear/RBF SVM), sanity checks, ablation, feature figure
 train_utils.py    shared PyTorch training loop (same augmentation/loss/early stopping for B and C), MAC counter
-scratch_cnn.py    Method B (WasteNet-R residual CNN; --arch plain = first version)
+scratch_cnn.py    Method B (WasteNet plain + WasteNet-R residual CNN, keeps the better on validation)
 pretrained.py     Method C (MobileNetV3-Large; --arch efficientnet_b0 / resnet18 also work)
 methods.py        loads the trained methods behind one predict_proba() interface
 evaluate.py       experiments, results table, plots, recommendation
