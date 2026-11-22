@@ -24,6 +24,29 @@ speed and size?
 
 All three load ImageNet-1k weights from torchvision and are fine-tuned by the same recipe in `finetune.py`; only the architecture differs.
 
+## Results (final run, held-out test set of 1,021 images)
+
+| Model | Macro-F1 | Accuracy | CPU ms/img | GPU ms/img | Params | MACs | Train time |
+|---|---|---|---|---|---|---|---|
+| **A. MobileNetV3-Large** (recommended) | **97.5%** | **97.5%** | **29.2** | 8.6 | 4.2 M | 215 M | 4.7 min |
+| B. EfficientNet-B0 | 97.0% | 96.9% | 40.8 | 10.5 | 4.0 M | 385 M | 4.9 min |
+| C. ResNet-18 | 96.7% | 96.6% | 50.3 | **5.3** | 11.2 M | 1,814 M | 4.7 min |
+
+Runtime: one 256×256 photo (batch 1), median of 5 rounds in which the three models alternate, on the training laptop
+(Intel laptop CPU, NVIDIA RTX 4050 Laptop GPU). Training time on that GPU.
+
+* **MobileNetV3 is recommended:** the most accurate, the fastest on a CPU and the most robust, although it is the smallest model.
+* **Fine-tuning matters most for the larger models.** Validation macro-F1 with only the new head trained on frozen ImageNet features
+  vs after fine-tuning the whole network: MobileNetV3 94.4% → 98.0%, EfficientNet-B0 89.4% → 97.2%, ResNet-18 87.6% → 96.4%.
+* **Robustness** (test macro-F1 under corruptions): all three stay at 94-97% under blur, darkness and a 30° rotation, but under
+  sensor noise EfficientNet-B0 drops to 73% (MobileNetV3 91%, ResNet-18 89%), and ResNet-18 drops to 91% on over-bright photos.
+* **Photo source:** the real landfill photos (RealWaste) are about 3-4 points harder than the web photos for all three
+  (MobileNetV3: 95.5% vs 98.7% accuracy).
+* **CPU vs GPU:** ResNet-18 needs 8.4× the multiply-adds of MobileNetV3 and is the slowest on a CPU, yet the fastest on a GPU:
+  its full convolutions suit a GPU, while the depthwise layers of the two mobile designs are limited by memory traffic.
+
+Full numbers and figures: `results/results_table.md`, `results/results.json`, `results/*.png` and the executed `CV_Project.ipynb`.
+
 ---
 
 ## Quick start: just run the app (no GPU, no dataset, no training)
