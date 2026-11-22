@@ -1,4 +1,4 @@
-"""Evaluate all trained methods on the SAME held-out test split and fill the results table.
+"""Evaluate the three fine-tuned models on the SAME held-out test split and fill the results table.
 
     python evaluate.py
 
@@ -12,10 +12,12 @@ Outputs (results/):
 
 Experiments run here:
     1. main comparison on the test split (accuracy, macro-F1, confusion matrix, per-class F1)
-    2. efficiency: runtime per image on CPU (and GPU), parameters, training time
+    2. efficiency: runtime per image on CPU and GPU, parameters, multiply-adds, training time
     3. per-source accuracy (web photos from Garbage-12 vs real landfill photos from RealWaste)
     4. robustness to image corruptions a phone/webcam produces
-    5. local photos (if data/raw/local/ was provided): generalisation to our own Iloilo pictures
+    5. frozen vs fine-tuned: validation macro-F1 with only the new head trained (ImageNet features frozen) vs after
+       fine-tuning the whole network (from each model's training log)
+    6. local photos (if data/raw/local/ was provided): generalisation to our own pictures
 """
 from __future__ import annotations
 
@@ -29,19 +31,18 @@ from common import (CLASSES, DISPLAY, METHOD_INFO, MODELS_DIR, RESULTS_DIR, SPLI
                     load_rgb, load_split, save_json, time_per_image)
 from methods import load_predictors
 
-# why a method wins (strength) and why it loses (weakness): the theory behind the numbers
+# why a model wins (strength) and why it loses (weakness): the theory behind the numbers
 STRENGTH = {
-    "classical": "Its hand-designed cues (edge directions, colour and texture histograms per image region) are cheap to "
-                 "compute, need no GPU and are fully explainable.",
-    "scratch": "It learned its own filters directly from our waste photos and is small enough for real-time use.",
-    "pretrained": "It starts from features learned on 1.2 million ImageNet photos (edges, textures, object parts) and only "
-                  "adapts them to waste, so it generalises best to new photos taken with a phone or webcam.",
+    "mobilenet_v3_large": "It was designed for phones (depthwise-separable convolutions and squeeze-and-excitation), so it needs "
+                          "the least computation per photo of the three and keeps the live camera smooth on a laptop CPU.",
+    "efficientnet_b0": "It scales depth, width and input resolution together (compound scaling), which gives the most "
+                       "accuracy per parameter.",
+    "resnet18": "Its plain residual design with full convolutions has the most capacity of the three for fine texture.",
 }
 WEAKNESS = {
-    "classical": "fixed features cannot tell apart items with similar colour and texture, e.g. a plastic bottle vs a "
-                 "sachet or cardboard vs food waste",
-    "scratch": "learned only from ~5k images, so it has less general visual knowledge for unusual items and lighting",
-    "pretrained": "largest model and slowest per image of the three",
+    "mobilenet_v3_large": "the smallest capacity of the three",
+    "efficientnet_b0": "its many depthwise and squeeze-and-excitation layers run slower on a CPU than its multiply-add count suggests",
+    "resnet18": "about 8x the multiply-adds of MobileNetV3 and almost 3x the parameters, so it is the slowest on a CPU",
 }
 
 
@@ -103,19 +104,18 @@ def plot_training_curves(path):
 
     from common import plot_history
 
-    metas = {k: load_json(MODELS_DIR / f"{f}_meta.json") for k, f in
-             [("classical", "classical"), ("scratch", "scratch_cnn"), ("pretrained", "pretrained")]}
+    metas = {k: load_json(MODELS_DIR / f"{k}_meta.json") for k in METHOD_INFO}
     metas = {k: m for k, m in metas.items() if m}
     if not metas:
         return
     fig, axes = plt.subplots(len(metas), 2, figsize=(11, 3.6 * len(metas)), squeeze=False)
     for row, (k, m) in zip(axes, metas.items()):
         plot_history(m["history"], METHOD_INFO[k]["short"], row[0], row[1])
-        if k == "pretrained" and m.get("stage1_epochs_run"):
+        if m.get("stage1_epochs_run"):
             for ax in row:
                 ax.axvline(m["stage1_epochs_run"] + 0.5, color="grey", linestyle=":", label="backbone unfrozen")
             row[0].legend()
-        row[0].set_title(f"{METHOD_INFO[k]['short']}: loss" + (" (multiclass hinge)" if k == "classical" else " (cross-entropy)"))
+        row[0].set_title(f"{METHOD_INFO[k]['short']}: loss (cross-entropy)")
         row[1].set_title(f"{METHOD_INFO[k]['short']}: accuracy / macro-F1")
     fig.tight_layout()
     fig.savefig(path, dpi=130)
@@ -195,18 +195,25 @@ def prediction_grid(split="test", n=12, seed=1):
 
 # ---- recommendation ----------------------------------------------------------------------
 def recommend(results: dict) -> dict:
-    """Best = highest test macro-F1; if another method is within 1 point and faster on CPU, prefer the faster one."""
+    """Recommended = the fastest model on the CPU among those within 1 macro-F1 point of the most accurate one.
+    With ~1,000 test images a 1-point gap is about the size of the test-set noise, while speed decides how smooth
+    the live camera feels."""
     order = sorted(results, key=lambda k: -results[k]["test"]["macro_f1"])
-    best = order[0]
-    for k in order[1:]:
-        if results[best]["test"]["macro_f1"] - results[k]["test"]["macro_f1"] <= 1.0 and \
-                results[k]["runtime_cpu_ms"] < results[best]["runtime_cpu_ms"]:
-            best = k
+    top = order[0]
+    top_f1 = results[top]["test"]["macro_f1"]
+    close = [k for k in order if top_f1 - results[k]["test"]["macro_f1"] <= 1.0]
+    best = min(close, key=lambda k: results[k]["runtime_cpu_ms"])
     r = results[best]
     fps = 1000 / max(r["runtime_cpu_ms"], 1e-6)
+    score = f"{r['test']['macro_f1']:.1f}% macro-F1, accuracy {r['test']['accuracy']:.1f}% on the held-out test set"
+    if best == top:
+        why = f"it has the highest score ({score})"
+    else:
+        why = (f"its score ({score}) is within {top_f1 - r['test']['macro_f1']:.1f} point of the most accurate model "
+               f"({METHOD_INFO[top]['short']}, {top_f1:.1f}%), a gap about the size of the test-set noise, and it is the "
+               f"fastest of those on the CPU")
     lines = [
-        f"**{METHOD_INFO[best]['short']}** ({r.get('model_name', METHOD_INFO[best]['name'])}) is recommended: it has the highest macro-F1 on the "
-        f"held-out test set ({r['test']['macro_f1']:.1f}%, accuracy {r['test']['accuracy']:.1f}%) and takes "
+        f"**{METHOD_INFO[best]['short']}** ({r.get('model_name', METHOD_INFO[best]['name'])}) is recommended: {why}. It takes "
         f"{r['runtime_cpu_ms']:.1f} ms per image on the CPU (about {fps:.0f} frames/s)"
         + (", fast enough for the live camera." if fps >= 10 else "."),
         STRENGTH[best],
@@ -215,7 +222,7 @@ def recommend(results: dict) -> dict:
               f"{results[k]['runtime_cpu_ms']:.1f} ms/img ({WEAKNESS[k]})" for k in order if k != best]
     if others:
         lines.append("By comparison, " + "; ".join(others) + ".")
-    return {"best": best, "explanation": " ".join(lines), "ranking": order}
+    return {"best": best, "explanation": " ".join(lines), "ranking": order, "most_accurate": top}
 
 
 def results_table(results: dict) -> tuple[str, list[dict]]:
@@ -246,7 +253,7 @@ def evaluate(n_timing=100, robustness_n=600, robustness=True) -> dict:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     preds, missing = load_predictors()
     if not preds:
-        raise SystemExit("No trained models found in models/. Train at least one method first.")
+        raise SystemExit("No trained models found in models/. Train at least one model first.")
     df = load_split("test")
     images = [load_rgb(p) for p in tqdm(df["abs_path"], desc="loading test images")]
     y = df["label_idx"].to_numpy()
@@ -265,19 +272,18 @@ def evaluate(n_timing=100, robustness_n=600, robustness=True) -> dict:
     results = {}
     for key, p in preds.items():
         print(f"\n=== {METHOD_INFO[key]['short']} ===")
-        dev = "cuda" if has_gpu and key != "classical" else "cpu"
+        dev = "cuda" if has_gpu else "cpu"
         p.to(dev)
         probs = batched(p, images)
         pred = probs.argmax(1)
         m = classification_metrics(y, pred)
         per_source = {s: classification_metrics(y[sources == s], pred[sources == s])["accuracy"] for s in np.unique(sources)}
-        meta = load_json(MODELS_DIR / {"classical": "classical_meta.json", "scratch": "scratch_cnn_meta.json",
-                                       "pretrained": "pretrained_meta.json"}[key], {})
+        meta = load_json(MODELS_DIR / f"{key}_meta.json", {})
         timing_imgs = images[:n_timing]
         p.to("cpu")
         cpu_ms = time_per_image(p.predict_proba, timing_imgs)
         gpu_ms = None
-        if has_gpu and key != "classical":
+        if has_gpu:
             p.to("cuda")
             gpu_ms = time_per_image(p.predict_proba, timing_imgs, sync=p.sync)
         r = {
@@ -292,6 +298,7 @@ def evaluate(n_timing=100, robustness_n=600, robustness=True) -> dict:
             "train_device": meta.get("device", "cpu"),
             "best_epoch": meta.get("best_epoch") or meta.get("chosen", {}).get("best_epoch"),
             "val_macro_f1": meta.get("val", {}).get("macro_f1"),
+            "val_macro_f1_head_only": meta.get("stage1_best_val_f1"),  # experiment 5: frozen ImageNet features
         }
         if local is not None:
             lp = batched(p, local[0]).argmax(1)
@@ -307,7 +314,7 @@ def evaluate(n_timing=100, robustness_n=600, robustness=True) -> dict:
         idx = rng.permutation(len(images))[:robustness_n]
         sub, ys = [images[i] for i in idx], y[idx]
         for key, p in preds.items():
-            p.to("cuda" if has_gpu and key != "classical" else "cpu")
+            p.to("cuda" if has_gpu else "cpu")
             rob[key] = {}
             for name, fn in CORRUPTIONS.items():
                 corrupted = [fn(im) for im in sub]
@@ -321,7 +328,7 @@ def evaluate(n_timing=100, robustness_n=600, robustness=True) -> dict:
     md, rows = results_table(results)
     (RESULTS_DIR / "results_table.md").write_text(
         md + f"\n\nRuntime = median time to classify one 256x256 image (batch 1), CPU: {cpu_name}"
-        + (f", GPU: {gpu_name}" if gpu_name else "") + ". Params = 0 for the classical method (rubric convention). "
+        + (f", GPU: {gpu_name}" if gpu_name else "") + ". "
         "MACs = multiply-accumulate operations per image in the network's conv/linear layers (the compute that "
         "decides CPU speed; more parameters does not always mean slower).\n")
     pd.DataFrame(rows).to_csv(RESULTS_DIR / "results_table.csv", index=False)
