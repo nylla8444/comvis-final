@@ -3,13 +3,13 @@
     "classical": {
       "model_name": "HOG + colour + LBP (spatial pyramid) -> RBF-kernel SVM (random Fourier features)",
       "test": {
-        "accuracy": 79.82370225269344,
-        "macro_f1": 80.33175858899037,
+        "accuracy": 78.94221351616063,
+        "macro_f1": 79.4411096406079,
         "per_class": {
           "biodegradable": {
-            "precision": 84.3205574912892,
-            "recall": 88.0,
-            "f1": 86.12099644128114,
+            "precision": 83.92857142857143,
+            "recall": 85.45454545454545,
+            "f1": 84.68468468468468,
             "support": 275
           },
           "recyclable": {
@@ -19,98 +19,98 @@
             "support": 372
           },
           "residual": {
-            "precision": 76.57894736842105,
-            "recall": 77.80748663101605,
-            "f1": 77.18832891246684,
+            "precision": 74.67700258397933,
+            "recall": 77.27272727272727,
+            "f1": 75.9526938239159,
             "support": 374
           }
         },
         "confusion_matrix": [
           [
-            242,
+            235,
             19,
-            14
+            21
           ],
           [
-            15,
+            13,
             282,
-            75
+            77
           ],
           [
-            30,
+            32,
             53,
-            291
+            289
           ]
         ]
       },
       "per_source_accuracy": {
-        "garbage_classification": 79.57860615883307,
+        "garbage_classification": 78.11993517017828,
         "realwaste": 80.19801980198021
       },
-      "runtime_cpu_ms": 10.628699965309352,
+      "runtime_cpu_ms": 10.626799950841814,
       "runtime_gpu_ms": null,
       "params_millions": 0.0,
       "macs_millions": null,
-      "train_time_min": 3.9837907583336345,
+      "train_time_min": 7.569141114999851,
       "train_device": "cpu",
-      "best_epoch": 58,
-      "val_macro_f1": 80.48500816182472
+      "best_epoch": 30,
+      "val_macro_f1": 81.4112567997244
     },
     "scratch": {
-      "model_name": "WasteNet-R: residual CNN (ours)",
+      "model_name": "WasteNet: plain 4-block CNN (ours)",
       "test": {
-        "accuracy": 86.38589618021547,
-        "macro_f1": 86.95709101897066,
+        "accuracy": 87.65915768854065,
+        "macro_f1": 88.0483561076423,
         "per_class": {
           "biodegradable": {
-            "precision": 92.7797833935018,
-            "recall": 93.45454545454545,
-            "f1": 93.11594202898551,
+            "precision": 91.81494661921708,
+            "recall": 93.81818181818183,
+            "f1": 92.80575539568345,
             "support": 275
           },
           "recyclable": {
-            "precision": 81.45363408521304,
-            "recall": 87.36559139784946,
-            "f1": 84.30609597924773,
+            "precision": 84.25,
+            "recall": 90.59139784946237,
+            "f1": 87.30569948186529,
             "support": 372
           },
           "residual": {
-            "precision": 86.95652173913044,
+            "precision": 88.23529411764706,
             "recall": 80.21390374331551,
-            "f1": 83.44923504867872,
+            "f1": 84.03361344537815,
             "support": 374
           }
         },
         "confusion_matrix": [
           [
-            257,
-            11,
-            7
+            258,
+            7,
+            10
           ],
           [
-            9,
-            325,
-            38
+            5,
+            337,
+            30
           ],
           [
-            11,
-            63,
+            18,
+            56,
             300
           ]
         ]
       },
       "per_source_accuracy": {
-        "garbage_classification": 85.25121555915722,
-        "realwaste": 88.11881188118812
+        "garbage_classification": 86.54781199351702,
+        "realwaste": 89.35643564356435
       },
-      "runtime_cpu_ms": 14.253400091547519,
-      "runtime_gpu_ms": 4.725300008431077,
-      "params_millions": 1.596579,
-      "macs_millions": 634.675968,
-      "train_time_min": 19.513389308333476,
+      "runtime_cpu_ms": 19.357250013854355,
+      "runtime_gpu_ms": 4.52555000083521,
+      "params_millions": 1.173987,
+      "macs_millions": 844.628736,
+      "train_time_min": 20.7700702800008,
       "train_device": "cuda (NVIDIA GeForce RTX 4050 Laptop GPU)",
-      "best_epoch": 111,
-      "val_macro_f1": 86.94730208663933
+      "best_epoch": 130,
+      "val_macro_f1": 87.44209894327683
     },
     "pretrained": {
       "model_name": "MobileNetV3-Large (ImageNet) fine-tuned",
@@ -159,11 +159,11 @@
         "garbage_classification": 99.02755267423015,
         "realwaste": 95.29702970297029
       },
-      "runtime_cpu_ms": 27.12799998698756,
-      "runtime_gpu_ms": 8.366549969650805,
+      "runtime_cpu_ms": 24.876150011550635,
+      "runtime_gpu_ms": 8.289100020192564,
       "params_millions": 4.205875,
       "macs_millions": 215.3136,
-      "train_time_min": 4.706631858332548,
+      "train_time_min": 4.664282614999683,
       "train_device": "cuda (NVIDIA GeForce RTX 4050 Laptop GPU)",
       "best_epoch": 13,
       "val_macro_f1": 96.97674220597436
@@ -171,20 +171,20 @@
   },
   "robustness_macro_f1": {
     "classical": {
-      "clean": 80.83840492858828,
-      "blur": 73.20274624943754,
-      "dark": 69.217252206843,
-      "bright": 61.86318333208124,
-      "noise": 54.06273107839233,
-      "rotate 30": 69.53814309461973
+      "clean": 80.41237458701302,
+      "blur": 71.09789812175319,
+      "dark": 67.50393290333902,
+      "bright": 61.95247764515101,
+      "noise": 53.73655126745908,
+      "rotate 30": 68.70471435128539
     },
     "scratch": {
-      "clean": 87.39963513873627,
-      "blur": 86.27802638111044,
-      "dark": 82.11919510998817,
-      "bright": 76.9909743921546,
-      "noise": 77.61215383873888,
-      "rotate 30": 85.69570765643132
+      "clean": 89.98876920489383,
+      "blur": 86.72087174063236,
+      "dark": 82.85624455403742,
+      "bright": 75.85095436767396,
+      "noise": 78.67976641653443,
+      "rotate 30": 87.70508191080641
     },
     "pretrained": {
       "clean": 97.16115980930957,
@@ -197,7 +197,7 @@
   },
   "recommendation": {
     "best": "pretrained",
-    "explanation": "**MobileNetV3** (MobileNetV3-Large (ImageNet) fine-tuned) is recommended: it has the highest macro-F1 on the held-out test set (97.6%, accuracy 97.6%) and takes 27.1 ms per image on the CPU (about 37 frames/s), fast enough for the live camera. It starts from features learned on 1.2 million ImageNet photos (edges, textures, object parts) and only adapts them to waste, so it generalises best to new photos taken with a phone or webcam. By comparison, Scratch CNN reaches 87.0% macro-F1 at 14.3 ms/img (learned only from ~5k images, so it has less general visual knowledge for unusual items and lighting); Classical (HOG+SVM) reaches 80.3% macro-F1 at 10.6 ms/img (fixed features cannot tell apart items with similar colour and texture, e.g. a plastic bottle vs a sachet or cardboard vs food waste).",
+    "explanation": "**MobileNetV3** (MobileNetV3-Large (ImageNet) fine-tuned) is recommended: it has the highest macro-F1 on the held-out test set (97.6%, accuracy 97.6%) and takes 24.9 ms per image on the CPU (about 40 frames/s), fast enough for the live camera. It starts from features learned on 1.2 million ImageNet photos (edges, textures, object parts) and only adapts them to waste, so it generalises best to new photos taken with a phone or webcam. By comparison, Scratch CNN reaches 88.0% macro-F1 at 19.4 ms/img (learned only from ~5k images, so it has less general visual knowledge for unusual items and lighting); Classical (HOG+SVM) reaches 79.4% macro-F1 at 10.6 ms/img (fixed features cannot tell apart items with similar colour and texture, e.g. a plastic bottle vs a sachet or cardboard vs food waste).",
     "ranking": [
       "pretrained",
       "scratch",
