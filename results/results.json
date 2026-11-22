@@ -1,0 +1,219 @@
+{
+  "results": {
+    "mobilenet_v3_large": {
+      "model_name": "MobileNetV3-Large (ImageNet, fine-tuned)",
+      "test": {
+        "accuracy": 97.45347698334965,
+        "macro_f1": 97.51659485268429,
+        "per_class": {
+          "biodegradable": {
+            "precision": 97.4910394265233,
+            "recall": 98.9090909090909,
+            "f1": 98.19494584837545,
+            "support": 275
+          },
+          "recyclable": {
+            "precision": 97.58064516129032,
+            "recall": 97.58064516129032,
+            "f1": 97.58064516129032,
+            "support": 372
+          },
+          "residual": {
+            "precision": 97.2972972972973,
+            "recall": 96.2566844919786,
+            "f1": 96.7741935483871,
+            "support": 374
+          }
+        },
+        "confusion_matrix": [
+          [
+            272,
+            0,
+            3
+          ],
+          [
+            2,
+            363,
+            7
+          ],
+          [
+            5,
+            9,
+            360
+          ]
+        ]
+      },
+      "per_source_accuracy": {
+        "garbage_classification": 98.70340356564019,
+        "realwaste": 95.54455445544554
+      },
+      "runtime_cpu_ms": 43.79000002518296,
+      "runtime_gpu_ms": 8.67629999993369,
+      "params_millions": 4.205875,
+      "macs_millions": 215.3136,
+      "train_time_min": 4.739931841668052,
+      "train_device": "cuda (NVIDIA GeForce RTX 4050 Laptop GPU)",
+      "best_epoch": 16,
+      "val_macro_f1": 98.02669106475119,
+      "val_macro_f1_head_only": 94.34592418340554
+    },
+    "efficientnet_b0": {
+      "model_name": "EfficientNet-B0 (ImageNet, fine-tuned)",
+      "test": {
+        "accuracy": 96.86581782566111,
+        "macro_f1": 96.96303866928623,
+        "per_class": {
+          "biodegradable": {
+            "precision": 97.14285714285714,
+            "recall": 98.9090909090909,
+            "f1": 98.01801801801801,
+            "support": 275
+          },
+          "recyclable": {
+            "precision": 96.7741935483871,
+            "recall": 96.7741935483871,
+            "f1": 96.7741935483871,
+            "support": 372
+          },
+          "residual": {
+            "precision": 96.7479674796748,
+            "recall": 95.45454545454545,
+            "f1": 96.09690444145357,
+            "support": 374
+          }
+        },
+        "confusion_matrix": [
+          [
+            272,
+            1,
+            2
+          ],
+          [
+            2,
+            360,
+            10
+          ],
+          [
+            6,
+            11,
+            357
+          ]
+        ]
+      },
+      "per_source_accuracy": {
+        "garbage_classification": 98.37925445705025,
+        "realwaste": 94.55445544554455
+      },
+      "runtime_cpu_ms": 36.03795007802546,
+      "runtime_gpu_ms": 9.830449940636754,
+      "params_millions": 4.011391,
+      "macs_millions": 384.538592,
+      "train_time_min": 4.770065010001417,
+      "train_device": "cuda (NVIDIA GeForce RTX 4050 Laptop GPU)",
+      "best_epoch": 15,
+      "val_macro_f1": 97.19655378762077,
+      "val_macro_f1_head_only": 89.3807990082665
+    },
+    "resnet18": {
+      "model_name": "ResNet-18 (ImageNet, fine-tuned)",
+      "test": {
+        "accuracy": 96.57198824681684,
+        "macro_f1": 96.69804035753828,
+        "per_class": {
+          "biodegradable": {
+            "precision": 98.17518248175182,
+            "recall": 97.81818181818181,
+            "f1": 97.99635701275045,
+            "support": 275
+          },
+          "recyclable": {
+            "precision": 96.24664879356568,
+            "recall": 96.50537634408603,
+            "f1": 96.3758389261745,
+            "support": 372
+          },
+          "residual": {
+            "precision": 95.72192513368985,
+            "recall": 95.72192513368985,
+            "f1": 95.72192513368985,
+            "support": 374
+          }
+        },
+        "confusion_matrix": [
+          [
+            269,
+            2,
+            4
+          ],
+          [
+            1,
+            359,
+            12
+          ],
+          [
+            4,
+            12,
+            358
+          ]
+        ]
+      },
+      "per_source_accuracy": {
+        "garbage_classification": 97.89303079416531,
+        "realwaste": 94.55445544554455
+      },
+      "runtime_cpu_ms": 51.519249973353,
+      "runtime_gpu_ms": 4.682250029873103,
+      "params_millions": 11.178051,
+      "macs_millions": 1813.56288,
+      "train_time_min": 4.598348246666137,
+      "train_device": "cuda (NVIDIA GeForce RTX 4050 Laptop GPU)",
+      "best_epoch": 15,
+      "val_macro_f1": 96.37445407118177,
+      "val_macro_f1_head_only": 87.62476387048922
+    }
+  },
+  "robustness_macro_f1": {
+    "mobilenet_v3_large": {
+      "clean": 96.70192893601913,
+      "blur": 95.29053916832648,
+      "dark": 96.39594858278706,
+      "bright": 94.11530798577554,
+      "noise": 91.44347802781844,
+      "rotate 30": 96.4271787760835
+    },
+    "efficientnet_b0": {
+      "clean": 96.40107034895934,
+      "blur": 95.6224037699102,
+      "dark": 95.79098150803314,
+      "bright": 93.9202816855473,
+      "noise": 73.42458970471318,
+      "rotate 30": 96.40420233508962
+    },
+    "resnet18": {
+      "clean": 96.035791782743,
+      "blur": 95.29116094633338,
+      "dark": 95.94807866134695,
+      "bright": 90.76541833525204,
+      "noise": 88.67421686580231,
+      "rotate 30": 93.56730001783401
+    }
+  },
+  "recommendation": {
+    "best": "efficientnet_b0",
+    "explanation": "**EfficientNet-B0** (EfficientNet-B0 (ImageNet, fine-tuned)) is recommended: its score (97.0% macro-F1, accuracy 96.9% on the held-out test set) is within 0.6 point of the most accurate model (MobileNetV3, 97.5%), a gap about the size of the test-set noise, and it is the fastest of those on the CPU. It takes 36.0 ms per image on the CPU (about 28 frames/s), fast enough for the live camera. It scales depth, width and input resolution together (compound scaling), which gives the most accuracy per parameter. By comparison, MobileNetV3 reaches 97.5% macro-F1 at 43.8 ms/img (the smallest capacity of the three); ResNet-18 reaches 96.7% macro-F1 at 51.5 ms/img (about 8x the multiply-adds of MobileNetV3 and almost 3x the parameters, so it is the slowest on a CPU).",
+    "ranking": [
+      "mobilenet_v3_large",
+      "efficientnet_b0",
+      "resnet18"
+    ],
+    "most_accurate": "mobilenet_v3_large"
+  },
+  "missing_methods": [],
+  "test_images": 1021,
+  "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "classes": {
+    "biodegradable": "Biodegradable (Nabubulok)",
+    "recyclable": "Recyclable",
+    "residual": "Non-biodegradable / Residual"
+  }
+}
