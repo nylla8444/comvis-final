@@ -24,3 +24,8 @@ flagged/
 Thumbs.db
 .vscode/
 .idea/
+
+# design notes (local only); paths are relative to this repo root and use forward slashes
+.impeccable/
+DESIGN.md
+PRODUCT.md
