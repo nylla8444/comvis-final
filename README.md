@@ -1,7 +1,7 @@
-# BasuraBin: waste segregation with 3 computer-vision methods
+# BasuraBin: waste segregation with three pretrained CNNs
 
-WVSU Computer Vision Comparison Project. One task, three methods, same data, same splits, same metrics,
-plus an app that runs all three on a photo, a video or the live webcam.
+WVSU Computer Vision Comparison Project. One task, three pretrained models, same data, same splits, same fine-tuning recipe,
+same metrics, plus an app that runs all three on a photo, a video or the live webcam.
 
 **Task:** classify a photo of one household waste item into the three RA 9003 bins:
 
@@ -13,17 +13,22 @@ plus an app that runs all three on a photo, a video or the live webcam.
 
 "Non-biodegradable" here means **residual**: neither recyclable nor compostable. A plastic bottle is non-biodegradable but goes to Recyclable.
 
-| Slot | Method | File |
-|---|---|---|
-| A. Classical | HOG + HSV colour + uniform LBP histograms (spatial pyramid), SVM with linear or RBF kernel, **all in NumPy** | `classical.py` |
-| B. Trained from scratch | our CNN in two designs, WasteNet (plain) and WasteNet-R (residual), 1.2-1.6 M params, PyTorch; the better on validation is kept | `scratch_cnn.py` |
-| C. Pretrained, modern | MobileNetV3-Large, ImageNet weights (torchvision), fine-tuned | `pretrained.py` |
+**Research question:** for a real-time camera app, which ImageNet-pretrained architecture gives the best trade-off between accuracy,
+speed and size?
+
+| Model | Year | Design idea | Size | File |
+|---|---|---|---|---|
+| A. MobileNetV3-Large | 2019 | built for phones: depthwise-separable convolutions, squeeze-and-excitation | ~4 M params, 0.22 G MACs | `mobilenet_v3.py` |
+| B. EfficientNet-B0 | 2019 | compound scaling of depth, width and resolution | ~4 M params, 0.39 G MACs | `efficientnet_b0.py` |
+| C. ResNet-18 | 2016 | classic residual network, full 3×3 convolutions | ~11 M params, 1.8 G MACs | `resnet18.py` |
+
+All three load ImageNet-1k weights from torchvision and are fine-tuned by the same recipe in `finetune.py`; only the architecture differs.
 
 ---
 
 ## Quick start: just run the app (no GPU, no dataset, no training)
 
-The three trained models are in `models\`, so a fresh clone can run the app on any Windows laptop with **Python 3.10-3.12** and **Git**.
+The three fine-tuned models are in `models\`, so a fresh clone can run the app on any Windows laptop with **Python 3.10-3.12** and **Git**.
 In PowerShell:
 
 ```powershell
@@ -42,8 +47,8 @@ python -m venv .venv
 .venv\Scripts\python app.py
 ```
 
-The install downloads a few hundred MB (PyTorch, Gradio, OpenCV ...) the first time. The app then opens in the browser at http://127.0.0.1:7860 and runs on
-the CPU when there is no GPU (all three methods together take well under a second per photo).
+The install downloads a few hundred MB (PyTorch, Gradio, OpenCV ...) the first time. The app then opens in the browser at
+http://127.0.0.1:7860 and runs on the CPU when there is no GPU.
 
 * **Photo** tab: upload a photo or take one with the webcam. (The test-set example thumbnails only appear on the laptop that has the dataset.)
 * **Live camera** tab: allow camera access, hold one item inside the square.
@@ -94,21 +99,19 @@ Or download in a browser and unzip yourself:
 (Dataset pages for citing: https://www.kaggle.com/datasets/mostafaabla/garbage-classification and https://archive.ics.uci.edu/dataset/908/realwaste.
 If you download by hand, you can also drop the zips into `data\downloads\` as `garbage-classification.zip` / `realwaste.zip` and run `python download_data.py` to unzip.)
 
-### Optional but recommended: our own photos
+### Optional: our own photos
 
 The datasets are mostly clean web photos and landfill photos; a classroom webcam looks different (hand, background, lighting).
-Our own photos show how well the methods handle that, and can also teach them. Two folders, one item per photo:
+Our own photos show how well the models handle that, and can also teach them. Two folders, one item per photo:
 
 ```
 data\raw\local\<bin>\         extra TEST set, never trained on: measures real-world accuracy
-data\raw\local_train\<bin>\   added to the TRAINING split for all three methods
+data\raw\local_train\<bin>\   added to the TRAINING split for all three models
 <bin> = biodegradable (banana peel, rice, leaves ...), recyclable (bottles, cans, cardboard ...), residual (sachets, wrappers, styrofoam ...)
 ```
 
-Use **different objects** in the two folders (an identical photo found in both is dropped from the test set). Aim for 30+ photos
-per bin in each, with the classroom background and light, and include sachets and plastic bags.
-
-The quickest way is the webcam window (needs trained models, so do this after a first training run):
+Use **different objects** in the two folders (an identical photo found in both is dropped from the test set). Aim for 30+ photos per
+bin in each, with the classroom background and light. The webcam window saves them for you (needs trained models):
 
 ```powershell
 python live.py                   # keys 1 / 2 / 3 save the frame into data\raw\local\<bin>\ (test photos)
@@ -133,19 +136,21 @@ python prepare_data.py
 
 Expected total: about 6,800 images (above the 5,000 minimum). The exact numbers are printed and saved in `splits\summary.json`.
 
-## 4. Train the three methods (same splits for all)
+## 4. Fine-tune the three models (same splits and recipe for all)
 
 ```powershell
-python classical.py sanity      # sanity checks on synthetic images (rubric requirement)
-python classical.py train       # ~6-10 min, CPU (grid: linear and RBF kernel, 21 settings, 100 epochs)
-python classical.py ablation    # optional: HOG vs colour vs texture, with/without spatial pyramid
-python scratch_cnn.py           # WasteNet and WasteNet-R, up to 150 epochs each, keeps the better (~35 min on GPU)
-python pretrained.py            # MobileNetV3, 3 head epochs + up to 15 fine-tuning epochs
+python finetune.py              # all three, one after another (~15 min on an RTX 4050)
 ```
 
-Each saves its model in `models\` plus a `*_meta.json` (training curves, params, compute, training time, validation metrics).
-`scratch_cnn.py` trains both designs on the same data and keeps the one with the higher **validation** macro-F1 (both runs stay in
-`models\scratch_cnn_plain_meta.json` / `scratch_cnn_resnet_meta.json` for the report). `--arch plain` or `--arch resnet` trains only one.
+or one at a time: `python mobilenet_v3.py`, `python efficientnet_b0.py`, `python resnet18.py`.
+
+The shared recipe (`finetune.py`): centre crop → 224×224 → ImageNet normalisation; augmentation (crop/zoom, flips, rotation, colour
+jitter, blur); stage 1 trains only the new 3-class head on frozen ImageNet features (3 epochs), stage 2 fine-tunes the whole network
+with a 10× smaller learning rate on the backbone (up to 15 epochs); class-weighted cross-entropy with label smoothing, AdamW, cosine
+schedule, early stopping on validation macro-F1.
+
+Each model is saved as `models\<model>.pt` plus `models\<model>_meta.json` (training curves, params, MACs, training time, validation
+metrics, and the head-only validation score).
 
 ## 5. Evaluate (fills the results table)
 
@@ -158,18 +163,26 @@ Writes to `results\`:
 | File | For the report |
 |---|---|
 | `results_table.md` / `.csv` | the comparison table: accuracy, macro-F1, runtime (CPU & GPU), params, MACs (compute per image), train time |
-| `confusion_matrices.png` | confusion matrix per method |
-| `training_curves.png` | train vs validation loss/accuracy for every method |
+| `confusion_matrices.png` | confusion matrix per model |
+| `training_curves.png` | train vs validation loss/accuracy for every model (dotted line = backbone unfrozen) |
 | `robustness.png` | macro-F1 under blur / dark / bright / noise / rotation |
 | `misclassified_*.png` | failure cases for the error analysis |
 | `results.json` | all numbers + the recommendation the app shows |
 
+Experiments: (1) main comparison, (2) efficiency, (3) accuracy by photo source (web vs landfill), (4) robustness to corruptions,
+(5) frozen ImageNet features vs full fine-tuning, (6) our own photos if provided.
+
+The app recommends the **fastest model on the CPU among those within 1 macro-F1 point of the most accurate one**: with about
+1,000 test images a 1-point gap is about the size of the test-set noise, while speed decides how smooth the live camera feels.
+
 ## 6. The notebook (deliverable)
 
-`CV_Project.ipynb` runs everything above from top to bottom (download → prepare → sanity check → train A, B, C → feature ablation → evaluate → figures).
+`CV_Project.ipynb` runs everything above from top to bottom (download → prepare → fine-tune A, B, C → evaluate → figures).
 It works in Google Colab (it clones this repo itself; choose *Runtime → Change runtime type → GPU*) and locally.
 
-The deliverable must be the **executed** notebook (saved with its outputs). The simplest way on the laptop runs every cell without opening a browser and writes the outputs into the file (about 65 min on an RTX 4050; nothing is printed until it finishes with `Writing ... bytes to CV_Project.ipynb`):
+The deliverable must be the **executed** notebook (saved with its outputs). The simplest way on the laptop runs every cell without
+opening a browser and writes the outputs into the file (about 30 min on an RTX 4050; nothing is printed until it finishes with
+`Writing ... bytes to CV_Project.ipynb`):
 
 ```powershell
 python -m pip install notebook
@@ -181,13 +194,14 @@ python -m jupyter nbconvert --to notebook --execute --inplace --ExecutePreproces
 (`python -m` avoids the "jupyter is not recognized" error when pip's Scripts folder is not on PATH. Or open it with
 `python -m jupyter notebook CV_Project.ipynb`, choose *Run → Run All Cells*, and save when it finishes.)
 
-The notebook retrains all three methods, so its numbers replace the ones in `results\`. Commit the notebook and the outputs together; `models` adds the training logs (`*_meta.json`) and the three final model files the app loads (about 22 MB; the extra per-design copies `scratch_cnn_plain.pt` / `scratch_cnn_resnet.pt` stay out of git):
+The notebook retrains all three models, so its numbers replace the ones in `results\`. Commit the notebook, the outputs and the
+models together (`models` holds the three fine-tuned models the app loads, about 80 MB, plus their training logs):
 
 ```powershell
 git add CV_Project.ipynb results splits models
 ```
 ```powershell
-git commit -m "chore(results): add final run and executed notebook"
+git commit -m "chore(results): add run of the three pretrained models"
 ```
 ```powershell
 git push
@@ -196,14 +210,14 @@ git push
 ## 7. Run the app
 
 ```powershell
-python app.py          # browser app: Image / Live webcam / Video / Model comparison tabs
+python app.py          # browser app: Photo / Live camera / Video / Compare methods / About tabs
 python live.py         # full-window OpenCV webcam demo (most reliable for the class demo)
 ```
 
 * `python app.py --share` prints a temporary public link (handy when controlling the laptop remotely).
 * `python app.py --cpu` / `python live.py --cpu` run on the CPU to show real-time speed without a GPU.
 * `live.py` keys: `q` quit, `s` snapshot, `m` mirror, `1`/`2`/`3` save the frame as a biodegradable/recyclable/residual photo (see step 2). `--camera 1` for a USB webcam.
-* In the live webcam modes each method's answer is averaged over the last few frames, so the label does not flicker (`live.py --no-smooth` shows the raw per-frame answer).
+* In the live webcam modes each model's answer is averaged over the last few frames, so the label does not flicker (`live.py --no-smooth` shows the raw per-frame answer).
 
 **Demo tips:** hold **one** item inside the square, fill most of the square, use a plain background (bond paper or a table) and good light.
 Below 55% confidence the app says *Not sure* instead of guessing.
@@ -213,40 +227,41 @@ Below 55% confidence the app says *Not sure* instead of guessing.
 ## Files
 
 ```
-common.py         shared constants: bins, colours, preprocessing, metrics, timing
-download_data.py  downloads + unzips both datasets
-prepare_data.py   3-bin mapping, de-duplication, balancing, splits, 256x256 cache
-classical.py      Method A (NumPy HOG/HSV/LBP + spatial pyramid, linear/RBF SVM), sanity checks, ablation, feature figure
-train_utils.py    shared PyTorch training loop (same augmentation/loss/early stopping for B and C), MAC counter
-scratch_cnn.py    Method B (WasteNet plain + WasteNet-R residual CNN, keeps the better on validation)
-pretrained.py     Method C (MobileNetV3-Large; --arch efficientnet_b0 / resnet18 also work)
-methods.py        loads the trained methods behind one predict_proba() interface
-evaluate.py       experiments, results table, plots, recommendation
-annotate.py       draws results on images/frames
-app.py            Gradio app (upload image, upload video, live webcam)
-live.py           OpenCV real-time webcam window
-CV_Project.ipynb  the end-to-end notebook
-models/           the three final models the app loads + training logs (*_meta.json)
-results/          results table, figures and results.json (the recommendation the app shows)
-splits/           the fixed train/val/test lists used by all three methods
+common.py          shared constants: bins, colours, the three models, preprocessing, metrics, timing
+download_data.py   downloads + unzips both datasets
+prepare_data.py    3-bin mapping, de-duplication, balancing, splits, 256x256 cache, own photos
+train_utils.py     shared PyTorch training loop, augmentation, MAC counter, predictor wrapper
+finetune.py        the shared two-stage fine-tuning recipe (python finetune.py trains all three)
+mobilenet_v3.py    Model A: MobileNetV3-Large
+efficientnet_b0.py Model B: EfficientNet-B0
+resnet18.py        Model C: ResNet-18
+methods.py         loads the trained models behind one predict_proba() interface
+evaluate.py        experiments, results table, plots, recommendation
+annotate.py        draws results on images/frames, smooths live predictions
+app.py             Gradio app (photo, live camera, video, comparison, about)
+live.py            OpenCV real-time webcam window + photo capture
+CV_Project.ipynb   the end-to-end notebook
+models/            the three fine-tuned models the app loads + training logs (*_meta.json)
+results/           results table, figures and results.json (the recommendation the app shows)
+splits/            the fixed train/val/test lists used by all three models
 ```
 
 ## Troubleshooting
 
 * **`torch.cuda.is_available()` is False:** you installed the CPU build of PyTorch. Uninstall (`pip uninstall torch torchvision`) and reinstall with the CUDA command from step 1.
-* **Out of GPU memory:** add `--batch-size 32` to `scratch_cnn.py` / `pretrained.py`.
+* **Out of GPU memory:** add `--batch-size 32` to `finetune.py` (or to one model's script).
 * **DataLoader errors or slow start on Windows:** set `$env:COMVIS_WORKERS=0` before training.
 * **Webcam not found in `live.py`:** try `--camera 1`. Close other apps using the camera (Zoom, Teams, the browser tab of `app.py`).
 * **Webcam tab in the browser asks for permission:** allow it. It only works on `http://127.0.0.1` / `localhost` or the `--share` https link.
 
-## Data credits
+## Credits
 
 * Garbage Classification (12 classes), Kaggle user mostafaabla, https://www.kaggle.com/datasets/mostafaabla/garbage-classification
 * S. Single, S. Iranmanesh, R. Raad, "RealWaste: A Novel Real-Life Data Set for Landfill Waste Classification Using Deep Learning", *Information* 14(12):633, 2023. UCI ML Repository #908, CC BY 4.0.
-* MobileNetV3: A. Howard et al., "Searching for MobileNetV3", ICCV 2019. Weights from torchvision.
-
-Method references: HOG (Dalal & Triggs, CVPR 2005); uniform LBP (Ojala et al., TPAMI 2002); spatial pyramid
-(Lazebnik et al., CVPR 2006); random Fourier features (Rahimi & Recht, NeurIPS 2007); residual networks (He et al., CVPR 2016).
+* A. Howard et al., "Searching for MobileNetV3", ICCV 2019.
+* M. Tan, Q. V. Le, "EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks", ICML 2019.
+* K. He, X. Zhang, S. Ren, J. Sun, "Deep Residual Learning for Image Recognition", CVPR 2016.
+* Pretrained ImageNet-1k weights from torchvision (https://pytorch.org/vision/stable/models.html).
 
 ## AI-assistance disclosure
 
