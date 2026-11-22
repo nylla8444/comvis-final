@@ -21,6 +21,38 @@ plus an app that runs all three on a photo, a video or the live webcam.
 
 ---
 
+## Quick start: just run the app (no GPU, no dataset, no training)
+
+The three trained models are in `models\`, so a fresh clone can run the app on any Windows laptop with **Python 3.10-3.12** and **Git**.
+In PowerShell:
+
+```powershell
+git clone https://github.com/nylla8444/comvis-final.git
+```
+```powershell
+cd comvis-final
+```
+```powershell
+python -m venv .venv
+```
+```powershell
+.venv\Scripts\python -m pip install -r requirements.txt
+```
+```powershell
+.venv\Scripts\python app.py
+```
+
+The install downloads a few hundred MB (PyTorch, Gradio, OpenCV ...) the first time. The app then opens in the browser at http://127.0.0.1:7860 and runs on
+the CPU when there is no GPU (all three methods together take well under a second per photo).
+
+* **Photo** tab: upload a photo or take one with the webcam. (The test-set example thumbnails only appear on the laptop that has the dataset.)
+* **Live camera** tab: allow camera access, hold one item inside the square.
+* `.venv\Scripts\python live.py` opens the full-window webcam demo instead.
+* To get the newest version later: `git pull`.
+* macOS / Linux: use `.venv/bin/python` instead of `.venv\Scripts\python`.
+
+Everything below is only needed to rebuild the dataset and retrain the models.
+
 ## 1. Setup on the GPU laptop (Windows, PowerShell)
 
 ```powershell
@@ -149,7 +181,7 @@ python -m jupyter nbconvert --to notebook --execute --inplace --ExecutePreproces
 (`python -m` avoids the "jupyter is not recognized" error when pip's Scripts folder is not on PATH. Or open it with
 `python -m jupyter notebook CV_Project.ipynb`, choose *Run → Run All Cells*, and save when it finishes.)
 
-The notebook retrains all three methods, so its numbers replace the ones in `results\`. Commit the notebook and the outputs together; `models` only adds the small `*_meta.json` training logs, the weights stay ignored:
+The notebook retrains all three methods, so its numbers replace the ones in `results\`. Commit the notebook and the outputs together; `models` adds the training logs (`*_meta.json`) and the three final model files the app loads (about 22 MB; the extra per-design copies `scratch_cnn_plain.pt` / `scratch_cnn_resnet.pt` stay out of git):
 
 ```powershell
 git add CV_Project.ipynb results splits models
@@ -194,6 +226,9 @@ annotate.py       draws results on images/frames
 app.py            Gradio app (upload image, upload video, live webcam)
 live.py           OpenCV real-time webcam window
 CV_Project.ipynb  the end-to-end notebook
+models/           the three final models the app loads + training logs (*_meta.json)
+results/          results table, figures and results.json (the recommendation the app shows)
+splits/           the fixed train/val/test lists used by all three methods
 ```
 
 ## Troubleshooting
