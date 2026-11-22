@@ -1,5 +1,5 @@
-"""BasuraBin: the waste-segregation app. Runs all three methods on an uploaded image, an uploaded
-video or the live webcam, draws the result on the input, and names the recommended method.
+"""BasuraBin: the waste-segregation app. Runs all three fine-tuned models (MobileNetV3, EfficientNet-B0, ResNet-18)
+on an uploaded image, an uploaded video or the live webcam, draws the result on the input, and names the recommended model.
 
     python app.py              # opens http://127.0.0.1:7860 in the browser
     python app.py --share      # also prints a temporary public gradio.live link
@@ -41,7 +41,7 @@ INK = {"biodegradable": "#0D4D29", "recyclable": "#17368F", "residual": "#1A1D24
 ON_HERO = {"biodegradable": "#63E096", "recyclable": "#86A8FF", "residual": "#D6DAE3", "unsure": "#FFC552"}
 LID = {"biodegradable": "#0F7A3D", "recyclable": "#1F55D9", "residual": "#3B404C"}
 BIN_ICON = {"biodegradable": "leaf", "recyclable": "recycle", "residual": "bin"}
-METHOD_COLOR = {"pretrained": "#151A45", "scratch": "#4A5177", "classical": "#8A90A7"}
+METHOD_COLOR = {"mobilenet_v3_large": "#151A45", "efficientnet_b0": "#4A5177", "resnet18": "#8A90A7"}
 
 # Lucide icon paths (ISC licence)
 ICONS = {
@@ -167,10 +167,10 @@ def load_everything(device=None):
         S.best = S.results["recommendation"]["best"]
         S.explanation = S.results["recommendation"]["explanation"]
     else:
-        S.best = "pretrained" if "pretrained" in S.preds else next(iter(S.preds), None)
+        S.best = "mobilenet_v3_large" if "mobilenet_v3_large" in S.preds else next(iter(S.preds), None)
         S.explanation = ("No evaluation results yet - run `python evaluate.py` to compute the test metrics. "
-                         "Until then the pretrained model is used as the default.")
-    devs = {str(getattr(p, "device", "cpu")) for k, p in S.preds.items() if k != "classical"}
+                         "Until then MobileNetV3 is used as the default.")
+    devs = {str(getattr(p, "device", "cpu")) for p in S.preds.values()}
     if any(d.startswith("cuda") for d in devs):
         import torch
 
@@ -183,7 +183,7 @@ def letter(k: str) -> str:
     return METHOD_INFO[k]["slot"][0]
 
 
-METHOD_META = {"classical": "HOG + colour + LBP → SVM", "scratch": "Trained from scratch", "pretrained": "Pretrained on ImageNet"}
+METHOD_META = {k: v["tag"] for k, v in METHOD_INFO.items()}
 
 
 def method_meta(k: str) -> str:
@@ -434,18 +434,25 @@ def line_chart(vals: list, color: str, w: int = 136, h: int = 64) -> str:
 def compare_html() -> str:
     if not S.results:
         return idle_hero("No results yet", "Run python evaluate.py after training the three methods.", "chart")
-    res, best = S.results["results"], S.best
+    res, best = {k: v for k, v in S.results["results"].items() if k in METHOD_INFO}, S.best
+    if best not in res:
+        return idle_hero("No results for these models yet", "Run python evaluate.py after training the three models.", "chart")
     order = sorted(res, key=lambda k: -res[k]["test"]["macro_f1"])
     n_test = S.results.get("test_images", "?")
     b = res[best]
     bars = "".join(f'<div class="bb-f1{" is-best" if k == best else ""}"><span>{letter(k)} · {METHOD_INFO[k]["short"]}</span>'
                    f'<b>{res[k]["test"]["macro_f1"]:.1f}%</b><span class="bb-f1-track" aria-hidden="true"><i style="width:{res[k]["test"]["macro_f1"]:.1f}%"></i></span></div>'
                    for k in order)
+    if best == order[0]:
+        why = f"Highest macro-F1 on {n_test} held-out test images, and {b['runtime_cpu_ms']:.0f} ms per photo on a CPU"
+    else:
+        gap = res[order[0]]["test"]["macro_f1"] - b["test"]["macro_f1"]
+        why = (f"Within {gap:.1f} point of the most accurate model on {n_test} held-out test images (about the test-set noise), "
+               f"and the fastest of those: {b['runtime_cpu_ms']:.0f} ms per photo on a CPU")
     chead = (f'<h2 class="bb-verdict is-sentence">{METHOD_INFO[best]["short"]} decides</h2>'
-             f'<p class="bb-lead">Highest macro-F1 on {n_test} held-out test images, and {b["runtime_cpu_ms"]:.0f} ms per photo on a CPU: '
-             f'fast enough for the live camera.</p>')
+             f'<p class="bb-lead">{why}: fast enough for the live camera.</p>')
     top = hero(chead, f'<div class="bb-f1s">{bars}</div>', "",
-               '<p class="bb-note">Macro-F1 weighs the three bins equally · same images and splits for all three</p>', "chart",
+               '<p class="bb-note">Macro-F1 weighs the three bins equally · same images, splits and fine-tuning recipe for all three</p>', "chart",
                "Which method decides")
     # F1 by bin
     head = "".join(f'<th scope="col"><span class="bb-th">{icon(BIN_ICON[c])}{CAST_NAME[c]}</span></th>' for c in CLASSES)
@@ -460,10 +467,9 @@ def compare_html() -> str:
                f'<tbody>{body}<tr class="is-quiet"><th scope="row">Test images</th>{support}</tr></tbody></table>'
                '<p class="bb-hint">Best in each bin in heavier weight. F1 in %.</p></section>')
     # training curves
-    meta_files = {"pretrained": "pretrained_meta.json", "scratch": "scratch_cnn_meta.json", "classical": "classical_meta.json"}
     curves = ""
     for k in order:
-        hist = (load_json(MODELS_DIR / meta_files[k]) or {}).get("history", {}).get("val_f1") or []
+        hist = (load_json(MODELS_DIR / f"{k}_meta.json") or {}).get("history", {}).get("val_f1") or []
         if len(hist) > 1:
             curves += (f'<div class="bb-curve-box"><b>{letter(k)} · {METHOD_INFO[k]["short"].split(" (")[0]}</b>'
                        f'{line_chart(hist[:: max(1, len(hist) // 40)], METHOD_COLOR[k])}'
@@ -477,14 +483,14 @@ def compare_html() -> str:
             ("Parameters", lambda r: fmt(r.get("params_millions"), "M", 2)), ("Compute (MACs)", lambda r: fmt(r.get("macs_millions"), "M", 0)),
             ("Training time", lambda r: fmt(r.get("train_time_min"), "min"))]
     srows = "".join(f'<tr><th scope="row">{lab}</th>' + "".join(f"<td>{f(res[k])}</td>" for k in order) + "</tr>" for lab, f in spec)
-    speed = (f'<section class="bb-tile"><h3>Speed and size</h3><table class="bb-table"><thead><tr><th></th>'
+    speed = ('<section class="bb-tile"><h3>Speed and size</h3><table class="bb-table"><thead><tr><th></th>'
              + "".join(f'<th scope="col">{letter(k)}</th>' for k in order) + f'</tr></thead><tbody>{srows}</tbody></table></section>')
     # robustness
     rob = S.results.get("robustness_macro_f1") or {}
     rob_tile = ""
     if rob:
         conds = list(next(iter(rob.values())))
-        groups = "".join(f'<div class="bb-group"><div class="bb-group-bars">' + "".join(
+        groups = "".join('<div class="bb-group"><div class="bb-group-bars">' + "".join(
             f'<span style="--h:{rob[k][c]:.0f}%; --c:{METHOD_COLOR[k]}"><b>{rob[k][c]:.0f}</b></span>' for k in order if k in rob)
             + f'</div><span class="bb-group-label">{c.capitalize()}</span></div>' for c in conds)
         key = "".join(f'<span><i style="background:{METHOD_COLOR[k]}"></i>{letter(k)}</span>' for k in order)
@@ -518,30 +524,30 @@ def compare_html() -> str:
 
 def experiments_md() -> str:
     parts = []
-    abl = load_json(MODELS_DIR / "classical_ablation.json")
-    if abl and isinstance(abl[0], dict) and "description" in abl[0]:
-        parts.append("**Classical feature ablation** (same linear SVM, only the features change; validation macro-F1)\n\n"
-                     "| Features | Dimensions | Val macro-F1 (%) |\n|---|---|---|\n"
-                     + "\n".join(f"| {r['description']} | {r['dims']} | {r['val_macro_f1']:.1f} |" for r in abl))
-    cmeta = load_json(MODELS_DIR / "classical_meta.json")
-    if cmeta and cmeta.get("grid"):
-        best = {}
-        for g in cmeta["grid"]:
-            best[g["kernel"]] = max(best.get(g["kernel"], 0), g["val_macro_f1"])
-        parts.append("**Classical SVM kernel** (best validation macro-F1 per kernel): "
-                     + ", ".join(f"{k} {v:.1f}%" for k, v in best.items()) + f". Chosen: `{cmeta.get('chosen')}`")
-    smeta = load_json(MODELS_DIR / "scratch_cnn_meta.json")
-    if smeta and smeta.get("selection"):
-        parts.append("**Scratch CNN designs** (same data and recipe; the better on validation is used)\n\n"
-                     "| Design | Input | Params (M) | MACs (M) | Best epoch | Val macro-F1 (%) |\n|---|---|---|---|---|---|\n"
-                     + "\n".join(f"| {s['model']} | {s['image_size']} px | {s['params_millions']:.2f} | {s['macs_millions']:.0f} | "
-                                 f"{s['best_epoch']} | {s['val_macro_f1']:.1f} |" for s in smeta["selection"].values()))
-    if S.results and S.results.get("robustness_macro_f1"):
-        rob = S.results["robustness_macro_f1"]
-        names = list(next(iter(rob.values())))
-        parts.append("**Robustness** (test macro-F1 % under each corruption)\n\n| Method | " + " | ".join(names) + " |\n|---|"
-                     + "---|" * len(names) + "\n" + "\n".join(
-                         f"| {METHOD_INFO[k]['short']} | " + " | ".join(f"{v[n]:.0f}" for n in names) + " |" for k, v in rob.items()))
+    rows = []
+    for k in METHOD_KEYS:
+        m = load_json(MODELS_DIR / f"{k}_meta.json")
+        if m and m.get("stage1_best_val_f1") is not None:
+            rows.append(f"| {METHOD_INFO[k]['short']} | {m['stage1_best_val_f1']:.1f} | {m['val']['macro_f1']:.1f} | "
+                        f"{m['val']['macro_f1'] - m['stage1_best_val_f1']:+.1f} | {m['best_epoch']} | {m['train_time_min']:.1f} |")
+    if rows:
+        parts.append("**Frozen vs fine-tuned** (validation macro-F1 %: only the new head trained on frozen ImageNet features, "
+                     "then the whole network fine-tuned)\n\n| Model | Head only | Fine-tuned | Gain | Best epoch | Train time (min) |\n"
+                     "|---|---|---|---|---|---|\n" + "\n".join(rows))
+    if S.results:
+        res = {k: v for k, v in S.results["results"].items() if k in METHOD_INFO}
+        if res:
+            srcs = sorted({src for r in res.values() for src in r.get("per_source_accuracy", {})})
+            parts.append("**Accuracy by photo source** (% of test photos)\n\n| Model | " + " | ".join(srcs) + " |\n|---|"
+                         + "---|" * len(srcs) + "\n" + "\n".join(
+                             f"| {METHOD_INFO[k]['short']} | " + " | ".join(f"{r['per_source_accuracy'].get(src, 0):.1f}" for src in srcs)
+                             + " |" for k, r in res.items()))
+        rob = {k: v for k, v in (S.results.get("robustness_macro_f1") or {}).items() if k in METHOD_INFO}
+        if rob:
+            names = list(next(iter(rob.values())))
+            parts.append("**Robustness** (test macro-F1 % under each corruption)\n\n| Model | " + " | ".join(names) + " |\n|---|"
+                         + "---|" * len(names) + "\n" + "\n".join(
+                             f"| {METHOD_INFO[k]['short']} | " + " | ".join(f"{v[n]:.0f}" for n in names) + " |" for k, v in rob.items()))
     return "\n\n".join(parts) or "No experiment logs yet."
 
 
@@ -560,19 +566,19 @@ def about_html() -> str:
     bins = "".join(f'<section class="bb-tile bb-bin" style="background:{TINT[c]}; color:{INK[c]}"><header>{buddy(c, 64)}<div><h3>{DISPLAY[c]}</h3>'
                    f'<p>{where[c]}</p></div></header><ul class="bb-examples">' + "".join(f"<li>{e}</li>" for e in EXAMPLES_TEXT[c])
                    + "</ul></section>" for c in CLASSES)
-    steps = "".join(f'<li><span class="bb-letter{" is-dark" if k == S.best else ""}">{letter(k)}</span><div><b>{t}</b><p>{d}</p></div></li>' for k, t, d in [
-        ("classical", "Classical", "Hand-designed features (HOG edges, HSV colour and LBP texture per image region) and an SVM, written in NumPy."),
-        ("scratch", "Trained from scratch", "Our own small CNN, learned only from about 5,000 training photos."),
-        ("pretrained", "Pretrained", "MobileNetV3-Large learned general visual features from 1.2 million ImageNet photos, then was fine-tuned on ours.")])
-    how = (f'<section class="bb-tile"><h3>How it decides</h3><p>Three methods judge every item. All three were trained and tested on the same '
-           f'images and splits; the one with the highest held-out macro-F1 makes the call.</p><ul class="bb-steps">{steps}</ul></section>')
+    steps = "".join(f'<li><span class="bb-letter{" is-dark" if k == S.best else ""}">{letter(k)}</span><div><b>{METHOD_INFO[k]["short"]}</b>'
+                    f'<p>{METHOD_INFO[k]["about"]}</p></div></li>' for k in METHOD_KEYS)
+    how = (f'<section class="bb-tile"><h3>How it decides</h3><p>Three models judge every item. Each first learned general visual '
+           f'features from 1.2 million ImageNet photos, then was fine-tuned on our waste photos with the same images, splits and recipe. '
+           f'The recommended one (the fastest within 1 point of the best held-out macro-F1) makes the call.</p>'
+           f'<ul class="bb-steps">{steps}</ul></section>')
     data = ('<section class="bb-tile"><h3>Data</h3><p>Garbage Classification (Kaggle, mostafaabla) and RealWaste (UCI #908, CC BY 4.0), '
             'relabelled into the three bins.</p><p>1021 held-out test images: 275 biodegradable, 372 recyclable, 374 residual.</p></section>')
     return (f'<div class="bb bb-about"><div class="bb-bento is-hero">{top}{rules_tile}</div><div class="bb-bento is-three">{bins}</div>'
             f'<div class="bb-bento is-wide">{how}{data}</div></div>')
 
 
-PHOTO_IDLE = ("Which bin does it go in?", "Add a photo of one item. Three computer-vision methods judge it, and the most accurate one "
+PHOTO_IDLE = ("Which bin does it go in?", "Add a photo of one item. Three pretrained models judge it, and the recommended one "
               "makes the call.", "image", "Below 55% it says “Not sure” instead of guessing.")
 LIVE_IDLE = ("Hold one item to the camera", "Start the camera on the right. The answer updates live and is averaged over the last "
              "few frames, so it does not flicker.", "camera", "Below 55% it says “Not sure” instead of guessing.")
