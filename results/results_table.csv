@@ -1,4 +1,0 @@
-Method,Slot,Top-1 acc (%),Macro F1 (%),Runtime CPU (ms/img),Runtime GPU (ms/img),Params (M),MACs (M/img),Train time (min)
-HOG + colour + LBP (spatial pyramid) -> RBF-kernel SVM (random Fourier features),A. Classical,78.94,79.44,10.63,-,0.0,-,7.57
-WasteNet: plain 4-block CNN (ours),B. Trained from scratch,87.66,88.05,19.36,4.53,1.174,845,20.77
-MobileNetV3-Large (ImageNet) fine-tuned,"C. Pretrained, modern",97.55,97.59,24.88,8.29,4.206,215,4.66

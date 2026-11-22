@@ -51,7 +51,7 @@ def main(argv=None):
         raise SystemExit("No trained models in models/. Train the methods first.")
     res = load_json(RESULTS_DIR / "results.json")
     best = res["recommendation"]["best"] if res and res["recommendation"]["best"] in preds else \
-        ("pretrained" if "pretrained" in preds else next(iter(preds)))
+        ("mobilenet_v3_large" if "mobilenet_v3_large" in preds else next(iter(preds)))
 
     cap = cv2.VideoCapture(a.camera, cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, a.width)

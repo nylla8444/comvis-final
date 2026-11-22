@@ -1,6 +1,6 @@
-"""PyTorch helpers shared by the two neural methods (scratch CNN and pretrained model).
+"""PyTorch helpers shared by the three fine-tuned models.
 
-Both networks get exactly the same data, augmentation, loss, early-stopping rule and metrics,
+All three networks get exactly the same data, augmentation, loss, early-stopping rule and metrics,
 so the only thing that differs between them is the model itself.
 """
 from __future__ import annotations

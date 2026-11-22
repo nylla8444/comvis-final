@@ -1,6 +1,6 @@
-"""Shared constants and helpers used by every method (no PyTorch here).
+"""Shared constants and helpers used by every model (no PyTorch here).
 
-The three methods, the evaluation script and the app all import from this file,
+The three models, the evaluation script and the app all import from this file,
 so the class list, the image preprocessing and the metrics are identical for all of them.
 """
 from __future__ import annotations
@@ -44,22 +44,35 @@ ADVICE = {
     "residual": "Not recyclable and not compostable: sachets, wrappers, styrofoam, old textiles. Goes to the black bin for disposal.",
 }
 
+# ---- the three compared models: all ImageNet-pretrained (torchvision), fine-tuned with the same recipe -------
+# module = the .py file that defines and trains the model; tag = one-line design idea shown in the app
 METHOD_INFO = {
-    "classical": {
-        "slot": "A. Classical",
-        # default names; evaluate.py uses the exact name each training run stores in models/*_meta.json
-        "name": "HOG + colour + LBP (spatial pyramid) -> SVM",
-        "short": "Classical (HOG+SVM)",
-    },
-    "scratch": {
-        "slot": "B. Trained from scratch",
-        "name": "WasteNet-R: residual CNN (ours)",
-        "short": "Scratch CNN",
-    },
-    "pretrained": {
-        "slot": "C. Pretrained, modern",
-        "name": "MobileNetV3-Large (ImageNet) fine-tuned",
+    "mobilenet_v3_large": {
+        "slot": "A. MobileNetV3-Large",
+        "name": "MobileNetV3-Large (ImageNet, fine-tuned)",
         "short": "MobileNetV3",
+        "module": "mobilenet_v3",
+        "tag": "Built for phones · 2019",
+        "about": "Designed for phones: depthwise-separable convolutions and squeeze-and-excitation keep it the lightest "
+                 "of the three (about 0.22 G multiply-adds per photo).",
+    },
+    "efficientnet_b0": {
+        "slot": "B. EfficientNet-B0",
+        "name": "EfficientNet-B0 (ImageNet, fine-tuned)",
+        "short": "EfficientNet-B0",
+        "module": "efficientnet_b0",
+        "tag": "Compound-scaled · 2019",
+        "about": "Grows depth, width and image resolution together (compound scaling); the most ImageNet accuracy per "
+                 "parameter of the three.",
+    },
+    "resnet18": {
+        "slot": "C. ResNet-18",
+        "name": "ResNet-18 (ImageNet, fine-tuned)",
+        "short": "ResNet-18",
+        "module": "resnet18",
+        "tag": "Classic residual CNN · 2016",
+        "about": "The classic residual network with full 3x3 convolutions: the largest and oldest of the three "
+                 "(about 1.8 G multiply-adds per photo), the baseline the mobile designs try to beat on speed.",
     },
 }
 METHOD_KEYS = list(METHOD_INFO)

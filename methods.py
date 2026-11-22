@@ -1,16 +1,14 @@
-"""Load whichever of the three trained methods exist, behind one common interface:
+"""Load whichever of the three fine-tuned models exist, behind one common interface:
 
     predictor.predict_proba(list_of_256x256_uint8_rgb_arrays) -> (N, 3) array of class probabilities
 """
 from __future__ import annotations
 
-from common import METHOD_KEYS, MODELS_DIR
+from importlib import import_module
 
-MODEL_FILES = {
-    "classical": MODELS_DIR / "classical.npz",
-    "scratch": MODELS_DIR / "scratch_cnn.pt",
-    "pretrained": MODELS_DIR / "pretrained.pt",
-}
+from common import METHOD_INFO, METHOD_KEYS, MODELS_DIR
+
+MODEL_FILES = {k: MODELS_DIR / f"{k}.pt" for k in METHOD_KEYS}
 
 
 def load_predictors(device=None, keys=METHOD_KEYS, verbose=True):
@@ -21,20 +19,9 @@ def load_predictors(device=None, keys=METHOD_KEYS, verbose=True):
             missing.append(k)
             continue
         try:
-            if k == "classical":
-                from classical import ClassicalPredictor
-
-                preds[k] = ClassicalPredictor(MODEL_FILES[k])
-            elif k == "scratch":
-                from scratch_cnn import load_predictor
-
-                preds[k] = load_predictor(device)
-            else:
-                from pretrained import load_predictor
-
-                preds[k] = load_predictor(device)
-        except Exception as e:  # e.g. a model file saved by an older version of the code: retrain that method
-            print(f"could not load {MODEL_FILES[k].name} ({type(e).__name__}: {e}) - retrain this method")
+            preds[k] = import_module(METHOD_INFO[k]["module"]).load_predictor(device)
+        except Exception as e:  # e.g. a model file saved by an older version of the code: retrain that model
+            print(f"could not load {MODEL_FILES[k].name} ({type(e).__name__}: {e}) - retrain this model")
             missing.append(k)
     if verbose and missing:
         print(f"not trained yet or not loadable (skipped): {missing}")
