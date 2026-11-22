@@ -204,8 +204,11 @@ def extract_split(split: str, use_cache: bool = True) -> tuple[np.ndarray, np.nd
     cache = PROCESSED_DIR / f"features_{split}.npz"
     if use_cache and cache.exists():
         z = np.load(cache, allow_pickle=False)
-        if "version" in z.files and str(z["version"]) == FEATURE_VERSION and list(z["paths"]) == list(df["path"]):
-            EXTRACT_SECONDS[split] = float(z["seconds"]) if "seconds" in z.files else 0.0
+        # a cache without its extraction time (made by an older version) is rebuilt, so the reported
+        # training time always includes the real feature-extraction cost
+        if ("version" in z.files and "seconds" in z.files and str(z["version"]) == FEATURE_VERSION
+                and list(z["paths"]) == list(df["path"])):
+            EXTRACT_SECONDS[split] = float(z["seconds"])
             return z["X"], z["y"]
     t0 = time.perf_counter()
     X = np.stack([extract_features(load_rgb(p)) for p in tqdm(df["abs_path"], desc=f"features [{split}]")])
