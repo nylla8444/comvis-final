@@ -731,6 +731,7 @@ main.fillable.app {padding-left: clamp(0px, calc(8vw - 30px), 32px) !important; 
 /* compare */
 .bb-bento {display: grid; gap: 24px; margin-top: 24px}
 .bb-bento:first-child {margin-top: 0}
+.bb-compare > .bb-tile {margin-top: 24px}
 .bb-bento.is-hero {grid-template-columns: minmax(0, 760fr) minmax(0, 496fr)}
 .bb-bento.is-split {grid-template-columns: minmax(0, 520fr) minmax(0, 736fr)}
 .bb-bento.is-three {grid-template-columns: repeat(3, minmax(0, 1fr))}
