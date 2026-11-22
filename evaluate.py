@@ -31,24 +31,40 @@ from common import (CLASSES, DISPLAY, METHOD_INFO, MODELS_DIR, RESULTS_DIR, SPLI
                     load_rgb, load_split, save_json, time_per_image)
 from methods import load_predictors
 
-# why a model wins (strength) and why it loses (weakness): the theory behind the numbers
-STRENGTH = {
-    "mobilenet_v3_large": "It was designed for phones (depthwise-separable convolutions and squeeze-and-excitation), so it needs "
-                          "the least computation per photo of the three and keeps the live camera smooth on a laptop CPU.",
-    "efficientnet_b0": "It scales depth, width and input resolution together (compound scaling), which gives the most "
-                       "accuracy per parameter.",
-    "resnet18": "Its plain residual design with full convolutions has the most capacity of the three for fine texture.",
-}
-WEAKNESS = {
-    "mobilenet_v3_large": "the smallest capacity of the three",
-    "efficientnet_b0": "its many depthwise and squeeze-and-excitation layers run slower on a CPU than its multiply-add count suggests",
-    "resnet18": "about 8x the multiply-adds of MobileNetV3 and almost 3x the parameters, so it is the slowest on a CPU",
+# the design idea behind each model: the theory used to explain the measured numbers
+DESIGN = {
+    "mobilenet_v3_large": "MobileNetV3 was designed for phones: depthwise-separable convolutions and squeeze-and-excitation give it "
+                          "the fewest multiply-adds of the three.",
+    "efficientnet_b0": "EfficientNet-B0 scales depth, width and input resolution together (compound scaling), which gives a lot "
+                       "of accuracy per parameter.",
+    "resnet18": "ResNet-18 uses full 3x3 convolutions with skip connections: the most parameters and multiply-adds of the three, "
+                "which suits a GPU better than a CPU.",
 }
 
 
 def batched(predictor, images, bs=64):
     out = [predictor.predict_proba(images[i : i + bs]) for i in range(0, len(images), bs)]
     return np.concatenate(out)
+
+
+def interleaved_timing(preds: dict, images: list, device: str, rounds: int = 5) -> dict:
+    """Milliseconds to classify one image (batch 1) for every model, measured in alternating rounds.
+
+    Laptop CPUs change speed all the time (power modes, turbo, and on hybrid CPUs fast vs power-saving cores), so timing
+    one model after the other can make the same model look 2x slower in one pass than in the next. Here every round
+    times every model on the same images, in a rotated order, so all models share the same conditions; the result is
+    the median over the rounds. Returns {key: {"ms": median, "rounds": [median of each round]}}."""
+    keys = list(preds)
+    for p in preds.values():
+        p.to(device)
+    per = {k: [] for k in keys}
+    for i, chunk in enumerate(np.array_split(np.arange(len(images)), rounds)):
+        sub = [images[j] for j in chunk]
+        for k in keys[i % len(keys):] + keys[: i % len(keys)]:  # rotate which model goes first
+            p = preds[k]
+            sync = getattr(p, "sync", None) if device == "cuda" else None
+            per[k].append(time_per_image(p.predict_proba, sub, warmup=3, sync=sync))
+    return {k: {"ms": float(np.median(v)), "rounds": [round(float(x), 2) for x in v]} for k, v in per.items()}
 
 
 # ---- corruptions for the robustness experiment ----------------------------------------
@@ -194,10 +210,32 @@ def prediction_grid(split="test", n=12, seed=1):
 
 
 # ---- recommendation ----------------------------------------------------------------------
-def recommend(results: dict) -> dict:
+def _why_not(k: str, best: str, results: dict, rob: dict) -> list[str]:
+    """Why model k is not the recommended one, from the measured numbers."""
+    r, b = results[k], results[best]
+    out = []
+    gap = b["test"]["macro_f1"] - r["test"]["macro_f1"]
+    if gap > 1.0:
+        out.append(f"{gap:.1f} points less accurate")
+    if r["runtime_cpu_ms"] > 1.1 * b["runtime_cpu_ms"]:
+        txt = f"{r['runtime_cpu_ms'] / b['runtime_cpu_ms']:.1f}x slower on the CPU"
+        if r.get("macs_millions") and b.get("macs_millions") and r["macs_millions"] > 1.3 * b["macs_millions"]:
+            txt += f" with {r['macs_millions'] / b['macs_millions']:.1f}x the multiply-adds"
+        out.append(txt)
+    if rob.get(k) and rob.get(best):
+        c = max(rob[k], key=lambda n: rob[best][n] - rob[k][n])
+        if rob[best][c] - rob[k][c] >= 5:
+            out.append(f"weaker under {c} ({rob[k][c]:.0f}% vs {rob[best][c]:.0f}% macro-F1)")
+    if not out and gap > 0:
+        out.append(f"{gap:.1f} point less accurate")
+    return out
+
+
+def recommend(results: dict, rob: dict | None = None) -> dict:
     """Recommended = the fastest model on the CPU among those within 1 macro-F1 point of the most accurate one.
     With ~1,000 test images a 1-point gap is about the size of the test-set noise, while speed decides how smooth
-    the live camera feels."""
+    the live camera feels. The explanation is built from the measured numbers."""
+    rob = rob or {}
     order = sorted(results, key=lambda k: -results[k]["test"]["macro_f1"])
     top = order[0]
     top_f1 = results[top]["test"]["macro_f1"]
@@ -208,20 +246,33 @@ def recommend(results: dict) -> dict:
     score = f"{r['test']['macro_f1']:.1f}% macro-F1, accuracy {r['test']['accuracy']:.1f}% on the held-out test set"
     if best == top:
         why = f"it has the highest score ({score})"
+        if len(close) > 1:
+            why += " and is also the fastest on the CPU of the models within 1 point of it"
     else:
         why = (f"its score ({score}) is within {top_f1 - r['test']['macro_f1']:.1f} point of the most accurate model "
                f"({METHOD_INFO[top]['short']}, {top_f1:.1f}%), a gap about the size of the test-set noise, and it is the "
                f"fastest of those on the CPU")
-    lines = [
-        f"**{METHOD_INFO[best]['short']}** ({r.get('model_name', METHOD_INFO[best]['name'])}) is recommended: {why}. It takes "
-        f"{r['runtime_cpu_ms']:.1f} ms per image on the CPU (about {fps:.0f} frames/s)"
-        + (", fast enough for the live camera." if fps >= 10 else "."),
-        STRENGTH[best],
-    ]
-    others = [f"{METHOD_INFO[k]['short']} reaches {results[k]['test']['macro_f1']:.1f}% macro-F1 at "
-              f"{results[k]['runtime_cpu_ms']:.1f} ms/img ({WEAKNESS[k]})" for k in order if k != best]
+    lines = [f"**{METHOD_INFO[best]['short']}** ({r.get('model_name', METHOD_INFO[best]['name'])}) is recommended: {why}. "
+             f"It takes {r['runtime_cpu_ms']:.1f} ms per image on the CPU (about {fps:.0f} frames/s)"
+             + (", fast enough for the live camera." if fps >= 10 else ".")]
+    if rob.get(best) and all(min(rob[best].values()) >= min(v.values()) for v in rob.values()):
+        worst = min(rob[best], key=rob[best].get)
+        lines.append(f"It is also the most robust: its lowest macro-F1 in the corruption tests is {rob[best][worst]:.0f}% ({worst}).")
+    lines.append(DESIGN[best])
+    others = []
+    for k in order:
+        if k == best:
+            continue
+        reasons = _why_not(k, best, results, rob)
+        others.append(f"{METHOD_INFO[k]['short']} reaches {results[k]['test']['macro_f1']:.1f}% macro-F1 at "
+                      f"{results[k]['runtime_cpu_ms']:.1f} ms/img" + (f" ({', '.join(reasons)})" if reasons else ""))
     if others:
         lines.append("By comparison, " + "; ".join(others) + ".")
+    gpu = {k: v["runtime_gpu_ms"] for k, v in results.items() if v.get("runtime_gpu_ms")}
+    if len(gpu) == len(results) and min(gpu, key=gpu.get) != best:
+        fastest = min(gpu, key=gpu.get)
+        lines.append(f"On a GPU the fastest is {METHOD_INFO[fastest]['short']} ({gpu[fastest]:.1f} ms vs {gpu[best]:.1f} ms), "
+                     f"but the app must also run smoothly on laptops without one.")
     return {"best": best, "explanation": " ".join(lines), "ranking": order, "most_accurate": top}
 
 
@@ -279,19 +330,12 @@ def evaluate(n_timing=100, robustness_n=600, robustness=True) -> dict:
         m = classification_metrics(y, pred)
         per_source = {s: classification_metrics(y[sources == s], pred[sources == s])["accuracy"] for s in np.unique(sources)}
         meta = load_json(MODELS_DIR / f"{key}_meta.json", {})
-        timing_imgs = images[:n_timing]
-        p.to("cpu")
-        cpu_ms = time_per_image(p.predict_proba, timing_imgs)
-        gpu_ms = None
-        if has_gpu:
-            p.to("cuda")
-            gpu_ms = time_per_image(p.predict_proba, timing_imgs, sync=p.sync)
         r = {
             "model_name": meta.get("display_name", METHOD_INFO[key]["name"]),
             "test": m,
             "per_source_accuracy": per_source,
-            "runtime_cpu_ms": cpu_ms,
-            "runtime_gpu_ms": gpu_ms,
+            "runtime_cpu_ms": None,  # filled in below by the interleaved timing
+            "runtime_gpu_ms": None,
             "params_millions": float(p.n_params),
             "macs_millions": meta.get("macs_millions"),
             "train_time_min": meta.get("train_time_min"),
@@ -303,10 +347,21 @@ def evaluate(n_timing=100, robustness_n=600, robustness=True) -> dict:
         if local is not None:
             lp = batched(p, local[0]).argmax(1)
             r["local_test"] = classification_metrics(local[1], lp)
-        print(f"test acc {m['accuracy']:.2f}%  macro-F1 {m['macro_f1']:.2f}%  | CPU {cpu_ms:.2f} ms/img"
-              + (f"  GPU {gpu_ms:.2f} ms/img" if gpu_ms else ""))
+        print(f"test acc {m['accuracy']:.2f}%  macro-F1 {m['macro_f1']:.2f}%")
         plot_misclassified(images, y, pred, probs, key, RESULTS_DIR / f"misclassified_{key}.png")
         results[key] = r
+
+    # efficiency: all models timed in alternating rounds on the same images (see interleaved_timing)
+    timing_imgs = images[:n_timing]
+    print("\ntiming (batch 1, models alternate over 5 rounds) ...")
+    cpu_t = interleaved_timing(preds, timing_imgs, "cpu")
+    gpu_t = interleaved_timing(preds, timing_imgs, "cuda") if has_gpu else {}
+    for key, r in results.items():
+        r["runtime_cpu_ms"], r["runtime_cpu_rounds_ms"] = cpu_t[key]["ms"], cpu_t[key]["rounds"]
+        if gpu_t:
+            r["runtime_gpu_ms"], r["runtime_gpu_rounds_ms"] = gpu_t[key]["ms"], gpu_t[key]["rounds"]
+        print(f"{METHOD_INFO[key]['short']}: CPU {r['runtime_cpu_ms']:.2f} ms/img (rounds {cpu_t[key]['rounds']})"
+              + (f" | GPU {r['runtime_gpu_ms']:.2f} ms/img" if gpu_t else ""))
 
     rob = {}
     if robustness:
@@ -324,10 +379,11 @@ def evaluate(n_timing=100, robustness_n=600, robustness=True) -> dict:
 
     plot_confusions(results, RESULTS_DIR / "confusion_matrices.png")
     plot_training_curves(RESULTS_DIR / "training_curves.png")
-    rec = recommend(results)
+    rec = recommend(results, rob)
     md, rows = results_table(results)
     (RESULTS_DIR / "results_table.md").write_text(
-        md + f"\n\nRuntime = median time to classify one 256x256 image (batch 1), CPU: {cpu_name}"
+        md + f"\n\nRuntime = median time to classify one 256x256 image (batch 1), the models timed in 5 alternating "
+        f"rounds on the same images; CPU: {cpu_name}"
         + (f", GPU: {gpu_name}" if gpu_name else "") + ". "
         "MACs = multiply-accumulate operations per image in the network's conv/linear layers (the compute that "
         "decides CPU speed; more parameters does not always mean slower).\n")
