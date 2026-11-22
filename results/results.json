@@ -47,15 +47,29 @@
         "garbage_classification": 98.70340356564019,
         "realwaste": 95.54455445544554
       },
-      "runtime_cpu_ms": 43.79000002518296,
-      "runtime_gpu_ms": 8.67629999993369,
+      "runtime_cpu_ms": 29.15349998511374,
+      "runtime_gpu_ms": 8.575250045396388,
       "params_millions": 4.205875,
       "macs_millions": 215.3136,
-      "train_time_min": 4.739931841668052,
+      "train_time_min": 4.692742820000664,
       "train_device": "cuda (NVIDIA GeForce RTX 4050 Laptop GPU)",
       "best_epoch": 16,
       "val_macro_f1": 98.02669106475119,
-      "val_macro_f1_head_only": 94.34592418340554
+      "val_macro_f1_head_only": 94.34592418340554,
+      "runtime_cpu_rounds_ms": [
+        26.82,
+        28.21,
+        29.28,
+        29.15,
+        39.01
+      ],
+      "runtime_gpu_rounds_ms": [
+        12.65,
+        8.54,
+        8.74,
+        8.58,
+        8.5
+      ]
     },
     "efficientnet_b0": {
       "model_name": "EfficientNet-B0 (ImageNet, fine-tuned)",
@@ -104,15 +118,29 @@
         "garbage_classification": 98.37925445705025,
         "realwaste": 94.55445544554455
       },
-      "runtime_cpu_ms": 36.03795007802546,
-      "runtime_gpu_ms": 9.830449940636754,
+      "runtime_cpu_ms": 40.81409994978458,
+      "runtime_gpu_ms": 10.484899976290762,
       "params_millions": 4.011391,
       "macs_millions": 384.538592,
-      "train_time_min": 4.770065010001417,
+      "train_time_min": 4.867820133332862,
       "train_device": "cuda (NVIDIA GeForce RTX 4050 Laptop GPU)",
       "best_epoch": 15,
       "val_macro_f1": 97.19655378762077,
-      "val_macro_f1_head_only": 89.3807990082665
+      "val_macro_f1_head_only": 89.3807990082665,
+      "runtime_cpu_rounds_ms": [
+        37.11,
+        68.78,
+        40.46,
+        57.7,
+        40.81
+      ],
+      "runtime_gpu_rounds_ms": [
+        11.4,
+        10.2,
+        10.48,
+        10.2,
+        10.52
+      ]
     },
     "resnet18": {
       "model_name": "ResNet-18 (ImageNet, fine-tuned)",
@@ -161,15 +189,29 @@
         "garbage_classification": 97.89303079416531,
         "realwaste": 94.55445544554455
       },
-      "runtime_cpu_ms": 51.519249973353,
-      "runtime_gpu_ms": 4.682250029873103,
+      "runtime_cpu_ms": 50.31114997109398,
+      "runtime_gpu_ms": 5.274199938867241,
       "params_millions": 11.178051,
       "macs_millions": 1813.56288,
-      "train_time_min": 4.598348246666137,
+      "train_time_min": 4.727351301665961,
       "train_device": "cuda (NVIDIA GeForce RTX 4050 Laptop GPU)",
       "best_epoch": 15,
       "val_macro_f1": 96.37445407118177,
-      "val_macro_f1_head_only": 87.62476387048922
+      "val_macro_f1_head_only": 87.62476387048922,
+      "runtime_cpu_rounds_ms": [
+        47.18,
+        50.31,
+        47.22,
+        51.23,
+        50.97
+      ],
+      "runtime_gpu_rounds_ms": [
+        11.24,
+        5.48,
+        5.27,
+        4.96,
+        4.9
+      ]
     }
   },
   "robustness_macro_f1": {
@@ -199,8 +241,8 @@
     }
   },
   "recommendation": {
-    "best": "efficientnet_b0",
-    "explanation": "**EfficientNet-B0** (EfficientNet-B0 (ImageNet, fine-tuned)) is recommended: its score (97.0% macro-F1, accuracy 96.9% on the held-out test set) is within 0.6 point of the most accurate model (MobileNetV3, 97.5%), a gap about the size of the test-set noise, and it is the fastest of those on the CPU. It takes 36.0 ms per image on the CPU (about 28 frames/s), fast enough for the live camera. It scales depth, width and input resolution together (compound scaling), which gives the most accuracy per parameter. By comparison, MobileNetV3 reaches 97.5% macro-F1 at 43.8 ms/img (the smallest capacity of the three); ResNet-18 reaches 96.7% macro-F1 at 51.5 ms/img (about 8x the multiply-adds of MobileNetV3 and almost 3x the parameters, so it is the slowest on a CPU).",
+    "best": "mobilenet_v3_large",
+    "explanation": "**MobileNetV3** (MobileNetV3-Large (ImageNet, fine-tuned)) is recommended: it has the highest score (97.5% macro-F1, accuracy 97.5% on the held-out test set) and is also the fastest on the CPU of the models within 1 point of it. It takes 29.2 ms per image on the CPU (about 34 frames/s), fast enough for the live camera. It is also the most robust: its lowest macro-F1 in the corruption tests is 91% (noise). MobileNetV3 was designed for phones: depthwise-separable convolutions and squeeze-and-excitation give it the fewest multiply-adds of the three. By comparison, EfficientNet-B0 reaches 97.0% macro-F1 at 40.8 ms/img (1.4x slower on the CPU with 1.8x the multiply-adds, weaker under noise (73% vs 91% macro-F1)); ResNet-18 reaches 96.7% macro-F1 at 50.3 ms/img (1.7x slower on the CPU with 8.4x the multiply-adds). On a GPU the fastest is ResNet-18 (5.3 ms vs 8.6 ms), but the app must also run smoothly on laptops without one.",
     "ranking": [
       "mobilenet_v3_large",
       "efficientnet_b0",
