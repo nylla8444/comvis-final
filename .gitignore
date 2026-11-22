@@ -1,8 +1,12 @@
 # data and trained models (large; rebuilt by the scripts)
 data/
-# model weights stay local; the small *_meta.json / *_ablation.json training logs are committed
+# models/: commit the training logs (*.json) and the three FINAL models the app loads (~22 MB),
+# so a fresh clone can run the app; the per-design scratch copies (scratch_cnn_plain/resnet.pt) stay local
 models/*
 !models/*.json
+!models/classical.npz
+!models/scratch_cnn.pt
+!models/pretrained.pt
 results/snapshots/
 *.zip
 
