@@ -37,7 +37,7 @@ Runtime: one 256×256 photo (batch 1), median of 5 rounds in which the three mod
 
 * **MobileNetV3 is recommended:** the most accurate, the fastest on a CPU and the most robust, although it is the smallest model.
 * **Fine-tuning matters most for the larger models.** Validation macro-F1 with only the new head trained on frozen ImageNet features
-  vs after fine-tuning the whole network: MobileNetV3 94.4% → 98.0%, EfficientNet-B0 89.4% → 97.2%, ResNet-18 87.6% → 96.4%.
+  vs after fine-tuning the whole network: MobileNetV3 94.3% → 98.0%, EfficientNet-B0 89.4% → 97.2%, ResNet-18 87.6% → 96.4%.
 * **Robustness** (test macro-F1 under corruptions): all three stay at 94-97% under blur, darkness and a 30° rotation, but under
   sensor noise EfficientNet-B0 drops to 73% (MobileNetV3 91%, ResNet-18 89%), and ResNet-18 drops to 91% on over-bright photos.
 * **Photo source:** the real landfill photos (RealWaste) are about 3-4 points harder than the web photos for all three
